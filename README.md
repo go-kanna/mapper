@@ -158,7 +158,7 @@ reported at the declaration that led to it, with the path:
 
 ```console
 ./mapper.go:15:2: error: EmployeeToProto: Address: no source in model.Address for employeev1.Address.Etag
-  declare AddressToProto(model.Address) *employeev1.Address in the //kanna:mapper interface and add //kanna:map Etag=-
+  declare AddressToEmployeev1(model.Address) *employeev1.Address in the //kanna:mapper interface and add //kanna:map Etag=-
 ```
 
 ## Conversions
