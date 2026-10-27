@@ -2,6 +2,8 @@ package gen
 
 import (
 	"fmt"
+	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/go-kanna/internal/diag"
@@ -70,6 +72,94 @@ func Convs(pkg *packages.Package, loaded []*packages.Package) ConvsRead {
 		r.Unlisted = append(r.Unlisted, describeConv(c))
 	}
 	return r
+}
+
+// Ops works out how each pair of types becomes the other, in pkg: with the
+// conversions its own lists name, the functions it declares, and functions
+// written as the pairs need them, which later pairs can call. Each pair is two
+// type expressions, src and dst, read in the scope of pkg's first file. Each
+// op is spelled as describeOp does, or "none"; each function written as
+// "src -> dst".
+func Ops(pkg *packages.Package, pairs ...[2]string) (ops, written []string) {
+	ds, _ := decls(pkg)
+	cs, _, _ := convsOf(pkg, nil, ds)
+	funcs := &fakeFunctions{}
+	for i := range ds {
+		funcs.fs = append(funcs.fs, &function{name: ds[i].name, src: ds[i].src, dst: ds[i].dst, decl: &ds[i]})
+	}
+	c := converter{convs: cs, funcs: funcs}
+
+	at := pkg.Syntax[0].Package
+	for _, p := range pairs {
+		src, err := types.Eval(pkg.Fset, pkg.Types, at, p[0])
+		if err != nil {
+			panic(err)
+		}
+		dst, err := types.Eval(pkg.Fset, pkg.Types, at, p[1])
+		if err != nil {
+			panic(err)
+		}
+		o, ok := c.op(src.Type, dst.Type)
+		if !ok {
+			ops = append(ops, "none")
+			continue
+		}
+		s := describeOp(o)
+		if o.fallible() {
+			s += " (fallible)"
+		}
+		ops = append(ops, s)
+	}
+	return ops, funcs.written
+}
+
+// fakeFunctions writes a function by recording it, under a name that says
+// what it maps.
+type fakeFunctions struct {
+	fs      []*function
+	written []string
+}
+
+func (f *fakeFunctions) find(src, dst types.Type) (*function, bool) {
+	i := slices.IndexFunc(f.fs, func(fn *function) bool { return samePair(fn.src, fn.dst, src, dst) })
+	if i < 0 {
+		return nil, false
+	}
+	return f.fs[i], true
+}
+
+func (f *fakeFunctions) write(src, dst types.Type) *function {
+	pair := typeLabel(src) + " -> " + typeLabel(dst)
+	fn := &function{name: "write(" + pair + ")", src: src, dst: dst}
+	f.fs = append(f.fs, fn)
+	f.written = append(f.written, pair)
+	return fn
+}
+
+// describeOp spells o compactly.
+func describeOp(o op) string {
+	switch o := o.(type) {
+	case opDirect:
+		return "direct"
+	case opConv:
+		return "conv:" + o.c.label
+	case opCall:
+		return "call:" + o.f.name
+	case opDeref:
+		return "deref(" + describeOp(o.elem) + ")"
+	case opAddr:
+		return "addr(" + describeOp(o.elem) + ")"
+	case opGuard:
+		return "guard(" + describeOp(o.elem) + ")"
+	case opSlice:
+		return "slice(" + describeOp(o.elem) + ")"
+	case opMap:
+		return "map(" + describeOp(o.elem) + ")"
+	case opCast:
+		return "cast:" + typeLabel(o.dst)
+	default:
+		return fmt.Sprintf("unknown %T", o)
+	}
 }
 
 func describeConv(c conv) string {

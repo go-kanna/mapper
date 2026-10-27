@@ -52,6 +52,15 @@ type convs struct {
 	unlisted []conv
 }
 
+// lookup returns the conversion in effect from src to dst.
+func (cs convs) lookup(src, dst types.Type) (conv, bool) {
+	i := slices.IndexFunc(cs.byPair, func(c conv) bool { return samePair(c.src, c.dst, src, dst) })
+	if i < 0 {
+		return conv{}, false
+	}
+	return cs.byPair[i], true
+}
+
 // anySlice is []any, the type of a list.
 var anySlice = types.NewSlice(types.Universe.Lookup("any").Type())
 
