@@ -235,8 +235,9 @@ mapping, in either direction. A tag on a promoted field keeps applying: a field 
 struct is not matched by its name. Neither is a field promoted through an embedded pointer, which would panic to read
 when the pointer is nil.
 
-A struct mapped to several types may carry a tag naming a field only some of them have. A tag naming a field that none
-of its destinations has is an error, with the field it was probably meant to name.
+A struct mapped to several types may carry a tag naming a field only some of them have, so a tag naming none of a
+destination's fields is no error by itself. When a destination field has no source and a source field's tag nearly names
+it, the error points the tag out.
 
 Where a source has a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil message
 reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself when the
