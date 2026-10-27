@@ -74,6 +74,51 @@ func Convs(pkg *packages.Package, loaded []*packages.Package) ConvsRead {
 	return r
 }
 
+// Matches pairs the fields of each function pkg declares, spelling each
+// function as "Name: Dst <- Src, ...", and reports the source tags that name a
+// field of none of their destinations.
+func Matches(pkg *packages.Package) ([]string, []string) {
+	ds, _ := decls(pkg)
+	out := make([]string, 0, len(ds))
+	var (
+		uses  []tagUse
+		diags []diag.Diag
+	)
+	for _, d := range ds {
+		pairs, us, dg := matchFields(pkg.Fset, site{pos: d.pos, path: d.name}, d.src, d.dst, d.entries)
+		out = append(out, d.name+": "+describePairs(pairs))
+		uses = append(uses, us...)
+		diags = append(diags, dg...)
+	}
+	return out, spell(append(diags, unusedTags(uses)...))
+}
+
+// MatchWritten pairs the fields of src and dst, two type expressions read in
+// pkg's scope, as for a function written for them on the way from path, which
+// a message would suggest declaring as suggest.
+func MatchWritten(pkg *packages.Package, src, dst, path, suggest string) (string, []string) {
+	at := site{path: path, suggest: suggest}
+	pairs, uses, diags := matchFields(pkg.Fset, at, eval(pkg, src), eval(pkg, dst), nil)
+	return describePairs(pairs), spell(append(diags, unusedTags(uses)...))
+}
+
+func describePairs(pairs []fieldPair) string {
+	s := make([]string, len(pairs))
+	for i, p := range pairs {
+		s[i] = p.dst.Name() + " <- " + p.src.Name()
+	}
+	return strings.Join(s, ", ")
+}
+
+// eval reads the type expression expr in the scope of pkg's first file.
+func eval(pkg *packages.Package, expr string) types.Type {
+	tv, err := types.Eval(pkg.Fset, pkg.Types, pkg.Syntax[0].Package, expr)
+	if err != nil {
+		panic(err)
+	}
+	return tv.Type
+}
+
 // Ops works out how each pair of types becomes the other, in pkg: with the
 // conversions its own lists name, the functions it declares, and functions
 // written as the pairs need them, which later pairs can call. Each pair is two
@@ -89,17 +134,8 @@ func Ops(pkg *packages.Package, pairs ...[2]string) (ops, written []string) {
 	}
 	c := converter{convs: cs, funcs: funcs}
 
-	at := pkg.Syntax[0].Package
 	for _, p := range pairs {
-		src, err := types.Eval(pkg.Fset, pkg.Types, at, p[0])
-		if err != nil {
-			panic(err)
-		}
-		dst, err := types.Eval(pkg.Fset, pkg.Types, at, p[1])
-		if err != nil {
-			panic(err)
-		}
-		o, ok := c.op(src.Type, dst.Type)
+		o, ok := c.op(eval(pkg, p[0]), eval(pkg, p[1]))
 		if !ok {
 			ops = append(ops, "none")
 			continue
