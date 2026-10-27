@@ -77,22 +77,17 @@ func Convs(pkg *packages.Package, loaded []*packages.Package) ConvsRead {
 }
 
 // Matches pairs the fields of each function pkg declares, spelling each
-// function as "Name: Dst <- Src, ...", and reports the source tags that name a
-// field of none of their destinations.
+// function as "Name: Dst <- Src, ...".
 func Matches(pkg *packages.Package) ([]string, []string) {
 	ds, _ := decls(pkg)
 	out := make([]string, 0, len(ds))
-	var (
-		uses  []tagUse
-		diags []diag.Diag
-	)
+	var diags []diag.Diag
 	for _, d := range ds {
 		m, dg := matchFields(pkg.Fset, site{pos: d.pos, path: d.name}, d.src, d.dst, d.entries)
 		out = append(out, d.name+": "+describeMatched(m))
-		uses = append(uses, m.uses...)
 		diags = append(diags, dg...)
 	}
-	return out, spell(append(diags, unusedTags(uses)...))
+	return out, spell(diags)
 }
 
 // MatchWritten pairs the fields of src and dst, two type expressions read in
@@ -101,7 +96,7 @@ func Matches(pkg *packages.Package) ([]string, []string) {
 func MatchWritten(pkg *packages.Package, src, dst, path, suggest string) (string, []string) {
 	at := site{path: path, suggest: suggest}
 	m, diags := matchFields(pkg.Fset, at, eval(pkg, src), eval(pkg, dst), nil)
-	return describeMatched(m), spell(append(diags, unusedTags(m.uses)...))
+	return describeMatched(m), spell(diags)
 }
 
 // describeMatched spells each pair "Dst <- Src", an arm's field after its

@@ -101,14 +101,12 @@ func TestMatches_Diagnostics(t *testing.T) {
 			want:  "test.go:4:16: error: map tag \"Nme\" on test.D.Title names no field of test.S\n  did you mean \"Name\"?",
 		},
 		{
-			name:  "a source tag naming nothing",
-			types: "type S struct{ X string; A string `map:\"Nope\"` }\ntype D struct{ X string }",
-			want:  "test.go:3:26: error: map tag \"Nope\" on test.S.A names no field of test.D",
-		},
-		{
-			name:  "a source tag naming a field nearly",
+			// A tag may name a field only another destination has, so it is no
+			// error by itself; it is pointed out where it seems to be meant.
+			name:  "a source tag nearly naming the field without a source",
 			types: "type S struct{ X string; A string `map:\"Titl\"` }\ntype D struct{ X, Title string }",
-			want:  "test.go:3:26: error: map tag \"Titl\" on test.S.A names no field of test.D\n  did you mean \"Title\"?",
+			want: "test.go:8:2: error: F: no source in test.S for test.D.Title\n" +
+				"  test.S.A is tagged map:\"Titl\"; did you mean map:\"Title\"?",
 		},
 		{
 			name:  "two source fields tagged alike",
@@ -227,44 +225,6 @@ type Tagged struct{ City string ` + "`map:\"Town\"`" + ` }
 			_, diags := gen.MatchWritten(pkg, "Address", tt.dst, "Owner: Address", suggest)
 			if !slices.Equal(diags, []string{tt.want}) {
 				t.Errorf("diagnostics = %q, want %q", diags, []string{tt.want})
-			}
-		})
-	}
-}
-
-// A struct mapped to several types may tag a field for some of them; the tag
-// is wrong only when none has the field.
-func TestMatches_SourceTagsAcrossDestinations(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		tag  string
-		want []string
-	}{
-		{name: "a field one of them has", tag: "Title"},
-		{
-			name: "a field none of them has",
-			tag:  "Titl",
-			want: []string{
-				"test.go:3:16: error: map tag \"Titl\" on test.S.A names no field of test.Full or test.Short\n" +
-					"  did you mean \"Title\"?",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			src := "package test\n\n" +
-				"type S struct{ A string `map:\"" + tt.tag + "\"`; Title, B string }\n" +
-				"type Full struct{ Title, B string }\n" +
-				"type Short struct{ B string }\n\n" +
-				"//kanna:mapper\ntype _ interface {\n\tF(S) Full\n\tG(S) Short\n}\n"
-			_, diags := gen.Matches(pkgtest.Load(t, map[string]string{"test.go": src}))
-			if !slices.Equal(diags, tt.want) {
-				t.Errorf("diagnostics = %q, want %q", diags, tt.want)
 			}
 		})
 	}

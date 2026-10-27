@@ -47,7 +47,6 @@ type planner struct {
 	plans []*plan
 	queue []*function        // written, not planned yet
 	sites map[*function]site // where a written function's problems go
-	uses  []tagUse
 	diags []diag.Diag
 
 	// at and field say where the function being planned got to, for a
@@ -87,14 +86,12 @@ func planFuncs(fset *token.FileSet, ds []decl, cs convs, declared map[string]tok
 	}
 
 	p.settleErrors()
-	p.diags = append(p.diags, unusedTags(p.uses)...)
 	return p.plans, dedupe(p.diags)
 }
 
 // plan plans f, whose problems go to at.
 func (p *planner) plan(f *function, at site, param string, entries []entry) {
 	m, diags := matchFields(p.fset, at, f.src, f.dst, entries)
-	p.uses = append(p.uses, m.uses...)
 	p.diags = append(p.diags, diags...)
 
 	pl := &plan{fn: f, param: param}

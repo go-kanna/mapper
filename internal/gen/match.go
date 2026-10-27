@@ -52,22 +52,6 @@ type sourceField struct {
 type matched struct {
 	pairs  []fieldPair
 	oneofs []oneofMatch
-	uses   []tagUse
-}
-
-// tagUse is a tag of a source field, as the destination of one function met
-// it. Whether the tag names a field at all depends on every destination its
-// struct is mapped to; see unusedTags.
-type tagUse struct {
-	field    *types.Var
-	tag      string
-	pos      token.Position
-	src, dst string   // the structs, as messages spell them
-	names    []string // the exported fields of the destination
-}
-
-func (u tagUse) hit() bool {
-	return slices.Contains(u.names, u.tag)
 }
 
 // matching pairs the fields of one function.
@@ -81,8 +65,7 @@ type matching struct {
 // matchFields pairs each exported field of dst's struct with the source that
 // fills it. A field left out, by map:"-" or by a //kanna:map entry, has no
 // pair; a field without a source is an error. A protobuf oneof of the
-// destination is matched arm by arm instead. It also returns how the tags of
-// the source met the destination.
+// destination is matched arm by arm instead.
 //
 // Each destination field takes the first of: its entry, its own tag, a source
 // field tagged with its name, the same name, the same name in another case,
@@ -126,7 +109,6 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 		}
 	}
 
-	out.uses = m.tagUses(sources, dstStruct)
 	return out, m.diags
 }
 
@@ -286,7 +268,7 @@ func (m *matching) source(name, label string, tagged *types.Var, tag string, sou
 	if v, ok := m.promotedField(name); ok {
 		return sourceField{v: v}, true
 	}
-	m.unmapped(name, label, tagged != nil && tagged.Embedded())
+	m.unmapped(name, label, tagged != nil && tagged.Embedded(), sources)
 	return sourceField{}, false
 }
 
@@ -333,11 +315,24 @@ func embeddedStruct(t types.Type, path []int) (*types.Struct, bool) {
 }
 
 // unmapped reports the destination field name, which label spells, as having
-// no source.
-func (m *matching) unmapped(name, label string, embedded bool) {
+// no source. A source field whose tag nearly names it is pointed out: a tag
+// may name a field only some destinations have, so one naming none of this
+// destination's is no error by itself.
+func (m *matching) unmapped(name, label string, embedded bool, sources []sourceField) {
 	d := diag.Errorf(m.at.pos, "%s: no source in %s for %s", m.at.path, structLabel(m.src), label)
 	if embedded {
 		d = d.WithHints("an embedded field is matched as one field, by its type's name; its fields are not")
+	}
+	var tags []string
+	for _, sf := range sources {
+		if sf.tag != "" {
+			tags = append(tags, sf.tag)
+		}
+	}
+	if tag, ok := suggest.Closest(name, tags); ok {
+		i := slices.IndexFunc(sources, func(sf sourceField) bool { return sf.tag == tag })
+		d = d.WithHints(fmt.Sprintf("%s.%s is tagged map:%q; did you mean map:%q?",
+			structLabel(m.src), sources[i].v.Name(), tag, name))
 	}
 	m.diags = append(m.diags, d.WithHints(m.leaveOutHint(name)))
 }
@@ -369,61 +364,6 @@ func (m *matching) overrideHint(field string) string {
 			m.at.suggest, mapperKey, mapKey, field)
 	}
 	return fmt.Sprintf("or override it in %s with //kanna:%s %s=<field>", m.at.path, mapKey, field)
-}
-
-// tagUses returns how the tags among sources met dstStruct.
-func (m *matching) tagUses(sources []sourceField, dstStruct *types.Struct) []tagUse {
-	var uses []tagUse
-	for _, sf := range sources {
-		if sf.tag != "" {
-			uses = append(uses, tagUse{
-				field: sf.v, tag: sf.tag, pos: m.pos(sf.v),
-				src: structLabel(m.src), dst: structLabel(m.dst), names: exportedNames(dstStruct),
-			})
-		}
-	}
-	return uses
-}
-
-// unusedTags reports the source tags that name a field of none of the
-// destinations their structs are mapped to.
-func unusedTags(uses []tagUse) []diag.Diag {
-	type use struct {
-		first tagUse
-		dsts  []string
-		names []string
-		hit   bool
-	}
-	var order []*types.Var
-	byField := make(map[*types.Var]*use)
-	for _, u := range uses {
-		a, ok := byField[u.field]
-		if !ok {
-			a = &use{first: u}
-			byField[u.field] = a
-			order = append(order, u.field)
-		}
-		a.hit = a.hit || u.hit()
-		if !slices.Contains(a.dsts, u.dst) {
-			a.dsts = append(a.dsts, u.dst)
-			a.names = append(a.names, u.names...)
-		}
-	}
-
-	var diags []diag.Diag
-	for _, f := range order {
-		a := byField[f]
-		if a.hit {
-			continue
-		}
-		d := diag.Errorf(a.first.pos, "map tag %q on %s.%s names no field of %s",
-			a.first.tag, a.first.src, f.Name(), strings.Join(a.dsts, " or "))
-		if s, ok := suggest.Closest(a.first.tag, a.names); ok {
-			d = d.WithHints(fmt.Sprintf("did you mean %q?", s))
-		}
-		diags = append(diags, d)
-	}
-	return diags
 }
 
 func (m *matching) pos(v *types.Var) token.Position {
