@@ -2,6 +2,7 @@ package gen
 
 import (
 	"fmt"
+	"go/token"
 	"go/types"
 	"slices"
 	"strings"
@@ -118,6 +119,50 @@ func eval(pkg *packages.Package, expr string) types.Type {
 	}
 	return tv.Type
 }
+
+// Plans plans the functions pkg declares and the ones written for them. Each
+// is spelled as its signature, with " (fallible)" when it returns an error, and
+// a line per field: "Dst = .Read op", with "()" after a getter.
+func Plans(pkg *packages.Package) ([]string, []string) {
+	ds, _ := decls(pkg)
+	cs, _, _ := convsOf(pkg, nil, ds)
+	plans, diags := planFuncs(pkg.Fset, ds, cs, declaredNames(pkg))
+
+	out := make([]string, len(plans))
+	for i, pl := range plans {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s(%s %s) %s", pl.fn.name, pl.param, typeLabel(pl.fn.src), typeLabel(pl.fn.dst))
+		if pl.fn.fallible {
+			b.WriteString(" (fallible)")
+		}
+		for _, f := range pl.fields {
+			r := "." + f.read.name
+			if f.read.getter {
+				r += "()"
+			}
+			fmt.Fprintf(&b, "\n  %s = %s %s", f.dst.Name(), r, describeOp(f.op))
+		}
+		out[i] = b.String()
+	}
+	return out, spell(diags)
+}
+
+// declaredNames returns the top-level names pkg declares outside its
+// generated files, as output.DeclaredNames reads them from disk.
+func declaredNames(pkg *packages.Package) map[string]token.Position {
+	generated := packages.GeneratedFiles(pkg)
+	names := make(map[string]token.Position)
+	for _, name := range pkg.Types.Scope().Names() {
+		pos := pkg.Fset.Position(pkg.Types.Scope().Lookup(name).Pos())
+		if !generated[pos.Filename] {
+			names[name] = pos
+		}
+	}
+	return names
+}
+
+// Unexported is unexported, for its own test.
+var Unexported = unexported
 
 // Ops works out how each pair of types becomes the other, in pkg: with the
 // conversions its own lists name, the functions it declares, and functions

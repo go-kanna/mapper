@@ -61,6 +61,16 @@ func (cs convs) lookup(src, dst types.Type) (conv, bool) {
 	return cs.byPair[i], true
 }
 
+// unlistedFor returns a function of the package that would convert src to dst
+// if a list named it.
+func (cs convs) unlistedFor(src, dst types.Type) (conv, bool) {
+	i := slices.IndexFunc(cs.unlisted, func(c conv) bool { return samePair(c.src, c.dst, src, dst) })
+	if i < 0 {
+		return conv{}, false
+	}
+	return cs.unlisted[i], true
+}
+
 // anySlice is []any, the type of a list.
 var anySlice = types.NewSlice(types.Universe.Lookup("any").Type())
 
