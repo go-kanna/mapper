@@ -31,16 +31,28 @@ type site struct {
 	suggest string
 }
 
-// fieldPair is a destination field and the source field that fills it.
+// fieldPair is a destination field and the source that fills it.
 type fieldPair struct {
-	dst, src *types.Var
+	dst *types.Var
+	src sourceField
 }
 
 // sourceField is a field of the source struct that a destination field can be
-// matched to, with the destination field its tag names, if any.
+// matched to, with the destination field its tag names, if any. The field of a
+// oneof's arm is one too, under its own name: via is then the oneof field it
+// is reached through.
 type sourceField struct {
 	v   *types.Var
 	tag string
+	via *types.Var
+	arm oneofArm
+}
+
+// matched is what matchFields pairs.
+type matched struct {
+	pairs  []fieldPair
+	oneofs []oneofMatch
+	uses   []tagUse
 }
 
 // tagUse is a tag of a source field, as the destination of one function met
@@ -66,17 +78,17 @@ type matching struct {
 	diags    []diag.Diag
 }
 
-// matchFields pairs each exported field of dst's struct with the field of src's
-// struct that fills it. A field left out, by map:"-" or by a //kanna:map entry,
-// has no pair; a field without a source is an error. It also returns how the
-// tags of the source met the destination.
+// matchFields pairs each exported field of dst's struct with the source that
+// fills it. A field left out, by map:"-" or by a //kanna:map entry, has no
+// pair; a field without a source is an error. A protobuf oneof of the
+// destination is matched arm by arm instead. It also returns how the tags of
+// the source met the destination.
 //
 // Each destination field takes the first of: its entry, its own tag, a source
 // field tagged with its name, the same name, the same name in another case,
 // and a field promoted from an embedded struct under the same name. An entry
 // is for this function only, so it takes the place of the tags.
-func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []entry,
-) ([]fieldPair, []tagUse, []diag.Diag) {
+func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []entry) (matched, []diag.Diag) {
 	m := &matching{fset: fset, at: at, src: src, dst: dst}
 	_, srcStruct, _ := namedStruct(src)
 	_, dstStruct, _ := namedStruct(dst)
@@ -84,7 +96,7 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 	sources := m.sourceFields(srcStruct)
 	byField := m.entries(entries, sources, srcStruct, dstStruct)
 
-	var pairs []fieldPair
+	var out matched
 	for i := range dstStruct.NumFields() {
 		f := dstStruct.Field(i)
 		if !f.Exported() {
@@ -92,40 +104,58 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 		}
 		tag, excluded := m.tag(dstStruct, i)
 		e, hasEntry := byField[f.Name()]
-		var (
-			v  *types.Var
-			ok bool
-		)
 		switch {
 		case hasEntry && e.excluded(), !hasEntry && excluded:
 			continue
 		case hasEntry:
-			v, ok = m.named(e.source)
-		default:
-			v, ok = m.source(f, tag, sources, srcStruct)
+			out.pairs = append(out.pairs, fieldPair{dst: f, src: m.named(e.source, sources)})
+			continue
 		}
-		if ok {
-			pairs = append(pairs, fieldPair{dst: f, src: v})
+
+		// An interface the source carries too is copied as it is, rather than
+		// taken apart as a oneof.
+		if arms := oneofArms(f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) {
+			if o, ok := m.dstOneof(f, arms, sources, byField, srcStruct); ok {
+				out.oneofs = append(out.oneofs, o)
+			}
+			continue
+		}
+		label := structLabel(dst) + "." + f.Name()
+		if sf, ok := m.source(f.Name(), label, f, tag, sources, srcStruct); ok {
+			out.pairs = append(out.pairs, fieldPair{dst: f, src: sf})
 		}
 	}
 
-	return pairs, m.tagUses(sources, dstStruct), m.diags
+	out.uses = m.tagUses(sources, dstStruct)
+	return out, m.diags
 }
 
-// sourceFields lists the exported fields of st that take part in mapping.
+// sourceFields lists the exported fields of st that take part in mapping,
+// followed by the arms of its oneofs, so that a field wins a name over an arm.
 func (m *matching) sourceFields(st *types.Struct) []sourceField {
-	var fields []sourceField
+	var fields, arms []sourceField
 	for i := range st.NumFields() {
 		f := st.Field(i)
 		if !f.Exported() {
 			continue
 		}
 		tag, excluded := m.tag(st, i)
-		if !excluded {
-			fields = append(fields, sourceField{v: f, tag: tag})
+		if excluded {
+			continue
+		}
+		fields = append(fields, sourceField{v: f, tag: tag})
+		for _, arm := range oneofArms(f.Type()) {
+			arms = append(arms, sourceField{v: arm.field, via: f, arm: arm})
 		}
 	}
-	return fields
+	return append(fields, arms...)
+}
+
+// carriesType reports whether a field of sources, not an arm, is of type t.
+func carriesType(sources []sourceField, t types.Type) bool {
+	return slices.ContainsFunc(sources, func(sf sourceField) bool {
+		return sf.via == nil && types.Identical(sf.v.Type(), t)
+	})
 }
 
 // tag reads the map tag of field i of st: the field it names, or that it is
@@ -152,8 +182,8 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 	byField := make(map[string]entry, len(entries))
 	for _, e := range entries {
 		ok := true
-		if !hasField(dstStruct, e.field) {
-			m.diags = append(m.diags, noSuchField(e, e.field, structLabel(m.dst), dstStruct))
+		if dsts := destinationNames(dstStruct); !slices.Contains(dsts, e.field) {
+			m.diags = append(m.diags, noSuchField(e, e.field, structLabel(m.dst), dsts))
 			ok = false
 		}
 		switch {
@@ -163,7 +193,7 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 				mapKey, e.field, e.source, structLabel(m.src), e.source))
 			ok = false
 		case !m.promoted(e.source):
-			m.diags = append(m.diags, noSuchField(e, e.source, structLabel(m.src), srcStruct))
+			m.diags = append(m.diags, noSuchField(e, e.source, structLabel(m.src), exportedNames(srcStruct)))
 			ok = false
 		}
 		if ok {
@@ -173,81 +203,73 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 	return byField
 }
 
-func noSuchField(e entry, name, owner string, st *types.Struct) diag.Diag {
+func noSuchField(e entry, name, owner string, names []string) diag.Diag {
 	d := diag.Errorf(e.pos, "//kanna:%s %s=%s: %s has no field %s", mapKey, e.field, e.source, owner, name)
-	if s, ok := suggest.Closest(name, exportedNames(st)); ok {
+	if s, ok := suggest.Closest(name, names); ok {
 		d = d.WithHints(fmt.Sprintf("did you mean %q?", s))
 	}
 	return d
 }
 
-// named returns the source field an entry names, which entries has found to
-// exist.
-func (m *matching) named(name string) (*types.Var, bool) {
-	_, st, _ := namedStruct(m.src)
-	for f := range st.Fields() {
-		if f.Name() == name {
-			return f, true
-		}
+// named returns the source an entry names, which entries has found to exist.
+func (m *matching) named(name string, sources []sourceField) sourceField {
+	if i := slices.IndexFunc(sources, func(sf sourceField) bool { return sf.v.Name() == name }); i >= 0 {
+		return sources[i]
 	}
-	return m.promotedField(name)
+	v, _ := m.promotedField(name)
+	return sourceField{v: v}
 }
 
-// source finds the source field for f, whose tag names tag or is "".
-func (m *matching) source(f *types.Var, tag string, sources []sourceField, srcStruct *types.Struct,
-) (*types.Var, bool) {
-	var chosen *types.Var
+// source finds the source for the destination field name, which label spells
+// for messages; tagged is the field carrying its tag, which names tag or is "".
+func (m *matching) source(name, label string, tagged *types.Var, tag string, sources []sourceField,
+	srcStruct *types.Struct,
+) (sourceField, bool) {
+	var chosen *sourceField
 	if tag != "" {
-		for _, sf := range sources {
-			if sf.v.Name() == tag {
-				chosen = sf.v
-				break
-			}
-		}
-		if chosen == nil {
-			chosen, _ = m.promotedField(tag)
-		}
-		if chosen == nil {
-			d := diag.Errorf(m.pos(f), "map tag %q on %s.%s names no field of %s",
-				tag, structLabel(m.dst), f.Name(), structLabel(m.src))
+		if i := slices.IndexFunc(sources, func(sf sourceField) bool { return sf.v.Name() == tag }); i >= 0 {
+			chosen = &sources[i]
+		} else if v, ok := m.promotedField(tag); ok {
+			chosen = &sourceField{v: v}
+		} else {
+			d := diag.Errorf(m.pos(tagged), "map tag %q on %s names no field of %s", tag, label, structLabel(m.src))
 			if s, ok := suggest.Closest(tag, exportedNames(srcStruct)); ok {
 				d = d.WithHints(fmt.Sprintf("did you mean %q?", s))
 			}
-			m.diags = append(m.diags, d.WithHints(m.overrideHint(f.Name())))
-			return nil, false
+			m.diags = append(m.diags, d.WithHints(m.overrideHint(name)))
+			return sourceField{}, false
 		}
 	}
 
-	var tagged []*types.Var
+	var named []sourceField
 	for _, sf := range sources {
-		if sf.tag == f.Name() {
-			tagged = append(tagged, sf.v)
+		if sf.tag == name {
+			named = append(named, sf)
 		}
 	}
 	switch {
-	case len(tagged) > 1:
-		m.diags = append(m.diags, diag.Errorf(m.pos(tagged[1]), "%s.%s and %s.%s are both tagged map:%q",
-			structLabel(m.src), tagged[0].Name(), structLabel(m.src), tagged[1].Name(), f.Name()))
-		return nil, false
-	case len(tagged) == 1 && chosen != nil && chosen != tagged[0]:
-		m.diags = append(m.diags, diag.Errorf(m.pos(tagged[0]),
-			"%s.%s is tagged map:%q, but %s.%s reads %s", structLabel(m.src), tagged[0].Name(), f.Name(),
-			structLabel(m.dst), f.Name(), chosen.Name()))
-		return nil, false
-	case len(tagged) == 1:
-		return tagged[0], true
+	case len(named) > 1:
+		m.diags = append(m.diags, diag.Errorf(m.pos(named[1].v), "%s.%s and %s.%s are both tagged map:%q",
+			structLabel(m.src), named[0].v.Name(), structLabel(m.src), named[1].v.Name(), name))
+		return sourceField{}, false
+	case len(named) == 1 && chosen != nil && chosen.v != named[0].v:
+		m.diags = append(m.diags, diag.Errorf(m.pos(named[0].v), "%s.%s is tagged map:%q, but %s reads %s",
+			structLabel(m.src), named[0].v.Name(), name, label, chosen.v.Name()))
+		return sourceField{}, false
+	case len(named) == 1:
+		return named[0], true
 	case chosen != nil:
-		return chosen, true
+		return *chosen, true
 	}
 
-	var folds []*types.Var
+	var folds []sourceField
 	for _, sf := range sources {
 		switch {
 		case sf.tag != "":
-		case sf.v.Name() == f.Name():
-			return sf.v, true
-		case strings.EqualFold(sf.v.Name(), f.Name()):
-			folds = append(folds, sf.v)
+		case sf.v.Name() == name:
+			return sf, true
+		case strings.EqualFold(sf.v.Name(), name):
+			folds = append(folds, sf)
 		}
 	}
 	switch len(folds) {
@@ -255,17 +277,17 @@ func (m *matching) source(f *types.Var, tag string, sources []sourceField, srcSt
 	case 1:
 		return folds[0], true
 	default:
-		m.diags = append(m.diags, diag.Errorf(m.at.pos, "%s: %s.%s could read %s.%s or %s.%s",
-			m.at.path, structLabel(m.dst), f.Name(), structLabel(m.src), folds[0].Name(),
-			structLabel(m.src), folds[1].Name()).WithHints(m.nameItHint(f.Name())))
-		return nil, false
+		m.diags = append(m.diags, diag.Errorf(m.at.pos, "%s: %s could read %s.%s or %s.%s",
+			m.at.path, label, structLabel(m.src), folds[0].v.Name(),
+			structLabel(m.src), folds[1].v.Name()).WithHints(m.nameItHint(name)))
+		return sourceField{}, false
 	}
 
-	if v, ok := m.promotedField(f.Name()); ok {
-		return v, true
+	if v, ok := m.promotedField(name); ok {
+		return sourceField{v: v}, true
 	}
-	m.unmapped(f)
-	return nil, false
+	m.unmapped(name, label, tagged != nil && tagged.Embedded())
+	return sourceField{}, false
 }
 
 // promotedField returns the field named name that src promotes from an
@@ -310,14 +332,14 @@ func embeddedStruct(t types.Type, path []int) (*types.Struct, bool) {
 	return st, true
 }
 
-// unmapped reports f, a destination field with no source.
-func (m *matching) unmapped(f *types.Var) {
-	d := diag.Errorf(m.at.pos, "%s: no source in %s for %s.%s",
-		m.at.path, structLabel(m.src), structLabel(m.dst), f.Name())
-	if f.Embedded() {
+// unmapped reports the destination field name, which label spells, as having
+// no source.
+func (m *matching) unmapped(name, label string, embedded bool) {
+	d := diag.Errorf(m.at.pos, "%s: no source in %s for %s", m.at.path, structLabel(m.src), label)
+	if embedded {
 		d = d.WithHints("an embedded field is matched as one field, by its type's name; its fields are not")
 	}
-	m.diags = append(m.diags, d.WithHints(m.leaveOutHint(f.Name())))
+	m.diags = append(m.diags, d.WithHints(m.leaveOutHint(name)))
 }
 
 // leaveOutHint says how to give field a source or leave it zero.
@@ -406,6 +428,20 @@ func unusedTags(uses []tagUse) []diag.Diag {
 
 func (m *matching) pos(v *types.Var) token.Position {
 	return m.fset.Position(v.Pos())
+}
+
+// destinationNames lists what a //kanna:map entry can name in st: its exported
+// fields, and the fields of the arms of its oneofs.
+func destinationNames(st *types.Struct) []string {
+	names := exportedNames(st)
+	for f := range st.Fields() {
+		if f.Exported() {
+			for _, arm := range oneofArms(f.Type()) {
+				names = append(names, arm.field.Name())
+			}
+		}
+	}
+	return names
 }
 
 // hasField reports whether st has an exported field called name.

@@ -15,9 +15,11 @@ import (
 // plan is the body of one function: how each field of its destination is
 // filled.
 type plan struct {
-	fn     *function
-	param  string // the source parameter's name
-	fields []fieldPlan
+	fn        *function
+	param     string // the source parameter's name
+	fields    []fieldPlan
+	dstOneofs []dstOneofPlan
+	srcOneofs []srcOneofPlan
 }
 
 // fieldPlan fills one destination field.
@@ -91,31 +93,41 @@ func planFuncs(fset *token.FileSet, ds []decl, cs convs, declared map[string]tok
 
 // plan plans f, whose problems go to at.
 func (p *planner) plan(f *function, at site, param string, entries []entry) {
-	pairs, uses, diags := matchFields(p.fset, at, f.src, f.dst, entries)
-	p.uses = append(p.uses, uses...)
+	m, diags := matchFields(p.fset, at, f.src, f.dst, entries)
+	p.uses = append(p.uses, m.uses...)
 	p.diags = append(p.diags, diags...)
 
 	pl := &plan{fn: f, param: param}
-	for _, pair := range pairs {
-		p.at, p.field = at, pair.dst.Name()
-		r, o, ok := p.fieldOp(f.src, pair)
+	p.at = at
+	for _, pair := range m.pairs {
+		p.field = pair.dst.Name()
+		if pair.src.via != nil {
+			p.planSrcArm(pl, f, at, pair)
+			continue
+		}
+		r, o, ok := p.fieldOp(f.src, pair.src.v, pair.dst)
 		if !ok {
-			p.diags = append(p.diags, p.cannotMap(at, f, pair))
+			p.diags = append(p.diags, p.cannotMap(at, structLabel(f.src)+"."+pair.src.v.Name(), pair.src.v.Type(),
+				structLabel(f.dst)+"."+pair.dst.Name(), pair.dst.Type()))
 			continue
 		}
 		pl.fields = append(pl.fields, fieldPlan{dst: pair.dst, read: r, op: o})
 	}
+	for _, om := range m.oneofs {
+		p.planDstOneof(pl, f, at, om)
+	}
 	p.plans = append(p.plans, pl)
 }
 
-// fieldOp finds how pair.dst is filled from pair.src, a field of src.
+// fieldOp finds how the destination field dst is filled from field, a field of
+// src.
 //
 // A read whose type is the destination's wins, whichever it is. Otherwise a
 // getter that turns a nil field into a zero value is passed over for the field
 // itself, which can hand the nil on.
-func (p *planner) fieldOp(src types.Type, pair fieldPair) (read, op, bool) {
-	reads := readsOf(src, pair.src)
-	dst := pair.dst.Type()
+func (p *planner) fieldOp(src types.Type, field, dstField *types.Var) (read, op, bool) {
+	reads := readsOf(src, field)
+	dst := dstField.Type()
 	for _, r := range reads {
 		if types.Identical(r.typ, dst) {
 			return r, opDirect{}, true
@@ -153,11 +165,10 @@ func nilable(t types.Type) bool {
 	return false
 }
 
-// cannotMap reports that nothing makes pair.dst out of pair.src in f.
-func (p *planner) cannotMap(at site, f *function, pair fieldPair) diag.Diag {
-	srcT, dstT := pair.src.Type(), pair.dst.Type()
-	d := diag.Errorf(at.pos, "%s: cannot map %s.%s (%s) to %s.%s (%s)", at.path,
-		structLabel(f.src), pair.src.Name(), typeLabel(srcT), structLabel(f.dst), pair.dst.Name(), typeLabel(dstT))
+// cannotMap reports that nothing makes a dstT, which dst labels, out of a srcT,
+// which src labels.
+func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, dstT types.Type) diag.Diag {
+	d := diag.Errorf(at.pos, "%s: cannot map %s (%s) to %s (%s)", at.path, src, typeLabel(srcT), dst, typeLabel(dstT))
 
 	hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), convertKey)
 	if c, ok := p.conv.convs.unlistedFor(srcT, dstT); ok {
@@ -253,7 +264,7 @@ func (p *planner) settleErrors() {
 	for changed := true; changed; {
 		changed = false
 		for _, pl := range p.plans {
-			if pl.fn.decl == nil && !pl.fn.fallible && pl.cause() != nil {
+			if _, o := pl.cause(); pl.fn.decl == nil && !pl.fn.fallible && o != nil {
 				pl.fn.fallible, changed = true, true
 			}
 		}
@@ -264,23 +275,38 @@ func (p *planner) settleErrors() {
 		if d == nil || d.fallible {
 			continue
 		}
-		if fp := pl.cause(); fp != nil {
-			verb, by := causeOf(fp.op)
+		if name, o := pl.cause(); o != nil {
+			verb, by := causeOf(o)
 			p.diags = append(p.diags, diag.Errorf(d.pos, "%s has to return an error: %s is %s %s, which can fail",
-				d.name, fp.dst.Name(), verb, by).
+				d.name, name, verb, by).
 				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
 		}
 	}
 }
 
-// cause returns the first field whose filling can fail, or nil.
-func (pl *plan) cause() *fieldPlan {
-	for i := range pl.fields {
-		if pl.fields[i].op.fallible() {
-			return &pl.fields[i]
+// cause returns the first destination field whose filling can fail, with the
+// op that can, or a nil op.
+func (pl *plan) cause() (string, op) {
+	for _, f := range pl.fields {
+		if f.op.fallible() {
+			return f.dst.Name(), f.op
 		}
 	}
-	return nil
+	for _, o := range pl.dstOneofs {
+		for _, a := range o.arms {
+			if a.op.fallible() {
+				return o.field.Name(), a.op
+			}
+		}
+	}
+	for _, o := range pl.srcOneofs {
+		for _, a := range o.arms {
+			if a.op.fallible() {
+				return a.dst.Name(), a.op
+			}
+		}
+	}
+	return "", nil
 }
 
 // causeOf names what makes o fail.

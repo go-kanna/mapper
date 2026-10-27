@@ -86,9 +86,9 @@ func Matches(pkg *packages.Package) ([]string, []string) {
 		diags []diag.Diag
 	)
 	for _, d := range ds {
-		pairs, us, dg := matchFields(pkg.Fset, site{pos: d.pos, path: d.name}, d.src, d.dst, d.entries)
-		out = append(out, d.name+": "+describePairs(pairs))
-		uses = append(uses, us...)
+		m, dg := matchFields(pkg.Fset, site{pos: d.pos, path: d.name}, d.src, d.dst, d.entries)
+		out = append(out, d.name+": "+describeMatched(m))
+		uses = append(uses, m.uses...)
 		diags = append(diags, dg...)
 	}
 	return out, spell(append(diags, unusedTags(uses)...))
@@ -99,14 +99,27 @@ func Matches(pkg *packages.Package) ([]string, []string) {
 // a message would suggest declaring as suggest.
 func MatchWritten(pkg *packages.Package, src, dst, path, suggest string) (string, []string) {
 	at := site{path: path, suggest: suggest}
-	pairs, uses, diags := matchFields(pkg.Fset, at, eval(pkg, src), eval(pkg, dst), nil)
-	return describePairs(pairs), spell(append(diags, unusedTags(uses)...))
+	m, diags := matchFields(pkg.Fset, at, eval(pkg, src), eval(pkg, dst), nil)
+	return describeMatched(m), spell(append(diags, unusedTags(m.uses)...))
 }
 
-func describePairs(pairs []fieldPair) string {
-	s := make([]string, len(pairs))
-	for i, p := range pairs {
-		s[i] = p.dst.Name() + " <- " + p.src.Name()
+// describeMatched spells each pair "Dst <- Src", an arm's field after its
+// wrapper, and each oneof "Kind <- [Wrapper.Field <- Src, ...]".
+func describeMatched(m matched) string {
+	s := make([]string, 0, len(m.pairs)+len(m.oneofs))
+	for _, p := range m.pairs {
+		src := p.src.v.Name()
+		if p.src.via != nil {
+			src = p.src.arm.wrapper.Obj().Name() + "." + src
+		}
+		s = append(s, p.dst.Name()+" <- "+src)
+	}
+	for _, o := range m.oneofs {
+		arms := make([]string, len(o.arms))
+		for i, a := range o.arms {
+			arms[i] = a.arm.wrapper.Obj().Name() + "." + a.arm.field.Name() + " <- " + a.src.Name()
+		}
+		s = append(s, o.field.Name()+" <- ["+strings.Join(arms, ", ")+"]")
 	}
 	return strings.Join(s, ", ")
 }
@@ -136,15 +149,35 @@ func Plans(pkg *packages.Package) ([]string, []string) {
 			b.WriteString(" (fallible)")
 		}
 		for _, f := range pl.fields {
-			r := "." + f.read.name
-			if f.read.getter {
-				r += "()"
+			fmt.Fprintf(&b, "\n  %s = %s %s", f.dst.Name(), describeRead(f.read), describeOp(f.op))
+		}
+		for _, o := range pl.dstOneofs {
+			fmt.Fprintf(&b, "\n  %s = oneof", o.field.Name())
+			for _, a := range o.arms {
+				r := describeRead(a.read)
+				if a.deref {
+					r = "*" + r
+				}
+				fmt.Fprintf(&b, "\n    %s.%s = %s %s", a.arm.wrapper.Obj().Name(), a.arm.field.Name(), r, describeOp(a.op))
 			}
-			fmt.Fprintf(&b, "\n  %s = %s %s", f.dst.Name(), r, describeOp(f.op))
+		}
+		for _, o := range pl.srcOneofs {
+			fmt.Fprintf(&b, "\n  oneof %s", describeRead(o.read))
+			for _, a := range o.arms {
+				fmt.Fprintf(&b, "\n    %s = %s.%s %s", a.dst.Name(), a.arm.wrapper.Obj().Name(), a.arm.field.Name(),
+					describeOp(a.op))
+			}
 		}
 		out[i] = b.String()
 	}
 	return out, spell(diags)
+}
+
+func describeRead(r read) string {
+	if r.getter {
+		return "." + r.name + "()"
+	}
+	return "." + r.name
 }
 
 // declaredNames returns the top-level names pkg declares outside its
