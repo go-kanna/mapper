@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
+	"maps"
 	"slices"
 	"strings"
 
@@ -178,6 +179,25 @@ func describeRead(r read) string {
 		return "." + r.name + "()"
 	}
 	return "." + r.name
+}
+
+// Emit renders the file generated for pkg, following the lists it names into
+// loaded and keeping clear of declared, the top-level names pkg declares
+// besides. It renders nothing when there are errors to report.
+func Emit(pkg *packages.Package, loaded []*packages.Package, declared map[string]token.Position,
+) ([]byte, []string, error) {
+	ds, diags := decls(pkg)
+	byPath := make(map[string]*packages.Package, len(loaded))
+	for _, p := range loaded {
+		byPath[p.PkgPath] = p
+	}
+	cs, _, cd := convsOf(pkg, byPath, ds)
+	plans, pd := planFuncs(pkg.Fset, ds, cs, declared)
+	if diags = append(append(diags, cd...), pd...); diag.HasErrors(diags) {
+		return nil, spell(diags), nil
+	}
+	src, err := emit(pkg.PkgPath, pkg.Name, plans, slices.Sorted(maps.Keys(declared))).Bytes()
+	return src, spell(diags), err
 }
 
 // declaredNames returns the top-level names pkg declares outside its

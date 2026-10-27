@@ -10,8 +10,8 @@ import (
 	"github.com/go-kanna/mapper/internal/gen"
 )
 
-// wire is a oneof as protoc-gen-go writes it, under ChangePB.Kind.
-const wire = `
+// protoOneof is a oneof as protoc-gen-go writes it, under ChangePB.Kind.
+const protoOneof = `
 type ChangePB struct {
 	Version int64
 	Kind    isChangePB_Kind
@@ -63,7 +63,7 @@ type _ interface {
 	ToPB(Change) *ChangePB
 	FromPB(*ChangePB) Change
 }
-` + wire}))
+` + protoOneof}))
 
 	want := []string{
 		// Going out, each arm is set from the field of its name, converted
@@ -140,7 +140,7 @@ func TestMatches_Oneof(t *testing.T) {
 				method = "\t//kanna:map " + tt.entry + "\n" + method
 			}
 			src := "package test\n\ntype Change struct {\n" + tt.domain + "\n}\n\n//kanna:mapper\ntype _ interface {\n" +
-				method + "}\n" + wire
+				method + "}\n" + protoOneof
 			found, diags := gen.Matches(pkgtest.Load(t, map[string]string{"test.go": src}))
 			if !slices.Equal(found, []string{tt.want}) {
 				t.Errorf("matches = %q, want %q", found, tt.want)
@@ -157,7 +157,7 @@ func TestPlans_OneofDiagnostics(t *testing.T) {
 
 	tests := []struct {
 		name string
-		src  string // after the package clause, before wire
+		src  string // after the package clause, before protoOneof
 		want string
 	}{
 		{
@@ -209,7 +209,7 @@ func TestPlans_OneofDiagnostics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + wire}))
+			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + protoOneof}))
 			if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.want) }) {
 				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
 			}
