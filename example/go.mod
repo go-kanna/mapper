@@ -4,10 +4,14 @@ go 1.27.0
 
 toolchain go1.27.3
 
-// There is no require of github.com/go-kanna/mapper yet: it is unreleased, so
-// this resolves through the repository's go.work. Once it carries a tag,
-// running `go get -tool github.com/go-kanna/mapper/cmd/kanna-mapper` in your
-// own module adds the require and the setup stands on its own.
 tool github.com/go-kanna/mapper/cmd/kanna-mapper
 
 require google.golang.org/protobuf v1.36.12
+
+require (
+	github.com/go-kanna/internal v0.0.3 // indirect
+	github.com/go-kanna/mapper v0.0.1 // indirect
+	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
+)
