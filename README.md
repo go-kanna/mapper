@@ -232,7 +232,11 @@ Each destination field takes the first rule that matches.
 
 A destination field with no source is an error, not a silent zero value. A field tagged `map:"-"` takes no part in
 mapping, in either direction. A tag on a promoted field keeps applying: a field excluded or renamed in an embedded
-struct is not matched by its name.
+struct is not matched by its name. Neither is a field promoted through an embedded pointer, which would panic to read
+when the pointer is nil.
+
+A struct mapped to several types may carry a tag naming a field only some of them have. A tag naming a field that none
+of its destinations has is an error, with the field it was probably meant to name.
 
 Where a source has a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil message
 reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself when the
@@ -255,7 +259,8 @@ type _ interface {
 
 `Field=-` leaves the destination field zero; `Field=Source` names the source field it reads, as a tag on the
 destination would. An entry naming no field of the destination is an error, with the field it was probably meant to
-name. An entry and a tag that disagree are an error too.
+name. An entry takes the place of the tags for its field, in that function only, so a struct filled from several types
+can read each under its own name.
 
 ## How values are converted
 
