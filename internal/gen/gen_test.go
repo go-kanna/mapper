@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -317,5 +318,35 @@ func TestCommand_ReportsLoadErrors(t *testing.T) {
 	}
 	if code != cli.ExitFailure {
 		t.Errorf("run = %d, want %d", code, cli.ExitFailure)
+	}
+}
+
+// Packages are generated apart: an error in one does not keep the output of
+// another, and what there is to say about it, from being worked out.
+func TestGenerate_PackagesApart(t *testing.T) {
+	t.Parallel()
+
+	dir := writeModule(t, map[string]string{
+		"broken/broken.go": "package broken\n\ntype E struct{ N int }\n\ntype W struct{ N string }\n\n" +
+			"//kanna:mapper\ntype _ interface{ F(E) W }\n",
+		"fine/fine.go": "package fine\n\ntype E struct{ N int }\n\ntype W struct{ N int64 }\n\n" +
+			"//kanna:mapper\ntype _ interface{ F(E) W }\n",
+	})
+	set, err := packages.Load([]string{"./..."}, packages.Config{Dir: dir, TypesInfo: true})
+	if err != nil || len(set.Diags) > 0 {
+		t.Fatalf("load: %v %v", err, set.Diags)
+	}
+
+	changes, diags := gen.Generate(set)
+	in := make([]string, 0, len(changes))
+	for _, c := range changes {
+		in = append(in, filepath.Base(filepath.Dir(c.Path)))
+	}
+	if want := []string{"fine"}; !slices.Equal(in, want) {
+		t.Errorf("changes in %q, want %q", in, want)
+	}
+	want := "error: F: cannot map broken.E.N (int) to broken.W.N (string)"
+	if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, want) }) {
+		t.Errorf("diagnostics = %q, want one containing %q", diags, want)
 	}
 }

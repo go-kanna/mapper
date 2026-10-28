@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-kanna/internal/diag"
+	"github.com/go-kanna/internal/output"
 	"github.com/go-kanna/internal/packages"
 )
 
@@ -193,6 +194,17 @@ func Emit(pkg *packages.Package, loaded []*packages.Package, declared map[string
 	}
 	src, err := emit(pkg.PkgPath, pkg.Name, plans, slices.Sorted(maps.Keys(declared))).Bytes()
 	return src, spell(diags), err
+}
+
+// Generate works out the changes for every package of set, as a run does,
+// spelling each diagnostic as diag.Diag.String does.
+func Generate(set packages.Set) ([]output.Change, []string) {
+	targets := make(map[string]bool, len(set.Packages))
+	for _, pkg := range set.Packages {
+		targets[pkg.PkgPath] = true
+	}
+	changes, _, diags := generate(set, targets)
+	return changes, spell(diags)
 }
 
 // declaredNames returns the top-level names pkg declares outside its
