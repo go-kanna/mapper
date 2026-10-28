@@ -240,8 +240,9 @@ destination's fields is no error by itself. When a destination field has no sour
 it, the error points the tag out.
 
 Where a source declares a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil
-message reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself when the
-destination can hold the nil.
+message reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself,
+unless its result is already the destination's type, so that a field left unset stays zero rather than being converted
+from an empty value.
 
 ### Fields you cannot tag
 

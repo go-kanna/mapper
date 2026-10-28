@@ -26,9 +26,12 @@ type Employee struct {
 	Manager *Employee
 	Note    *string
 	Count   *int64
+	Code    Code
 }
 
 type Address struct{ City string }
+
+type Code string
 
 type Wire struct {
 	Id      string
@@ -39,6 +42,7 @@ type Wire struct {
 	Manager *Wire
 	Note    *string
 	Count   *int32
+	Code    *string
 }
 
 func (w *Wire) GetName() string {
@@ -62,6 +66,13 @@ func (w *Wire) GetCount() int32 {
 		return *w.Count
 	}
 	return 0
+}
+
+func (w *Wire) GetCode() string {
+	if w != nil && w.Code != nil {
+		return *w.Code
+	}
+	return ""
 }
 
 type AddressPB struct{ City string }
@@ -94,9 +105,11 @@ func addressToAddressPB() {}
 			"  Home = .Home call:addressToAddressPB2\n" +
 			"  Offices = .Offices slice(call:addressToAddressPB2)\n" +
 			"  Manager = .Manager deref(call:ToWire)\n" +
-			"  Note = .Note direct",
-		// The getter reads Name; Note and Count are read as the fields, which
-		// keep their nil where the getters would make them zero.
+			"  Note = .Note direct\n" +
+			"  Code = .Code addr(cast:string)",
+		// The getter reads Name; Note, Count, and Code are read as the fields,
+		// which keep their nil where the getters would make them zero, whether
+		// or not the destination can hold it.
 		"FromWire(w *test.Wire) test.Employee (fallible)\n" +
 			"  ID = .Id direct\n" +
 			"  Name = .GetName() direct\n" +
@@ -105,7 +118,8 @@ func addressToAddressPB() {}
 			"  Offices = .Offices slice(call:addressPBToAddress)\n" +
 			"  Manager = .Manager guard(addr(call:FromWire))\n" +
 			"  Note = .Note direct\n" +
-			"  Count = .Count deref(addr(cast:int64))",
+			"  Count = .Count deref(addr(cast:int64))\n" +
+			"  Code = .Code deref(cast:test.Code)",
 		"addressToAddressPB2(src test.Address) *test.AddressPB\n  City = .City direct",
 		"addressPBToAddress(src *test.AddressPB) test.Address\n  City = .City direct",
 	}
