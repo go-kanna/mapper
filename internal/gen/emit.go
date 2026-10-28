@@ -135,10 +135,11 @@ func (e *emitter) read(r read) string {
 // value renders o applied to val as an expression of type dstT, writing first
 // the statements it needs. field names the destination field in an error.
 func (e *emitter) value(o op, val string, dstT types.Type, field string) string {
+	o, val = gets(o, val)
 	if x, ok := e.expr(o, val); ok {
 		return x
 	}
-	if call, ok := e.fallibleCall(o, val); ok {
+	if call, ok := e.fallibleCall(o, val, field); ok {
 		v := e.s.Name("v")
 		fmt.Fprintf(&e.b, "%s, %s := %s\n", v, e.errVar(), call)
 		e.check(field)
@@ -158,18 +159,28 @@ func (e *emitter) value(o op, val string, dstT types.Type, field string) string 
 // addressable writes o applied to val into a new variable when one statement
 // can, a call that can fail included, and returns the variable.
 func (e *emitter) addressable(o op, val, field string) (string, bool) {
+	o, val = gets(o, val)
 	if x, ok := e.expr(o, val); ok {
 		v := e.s.Name("v")
 		fmt.Fprintf(&e.b, "%s := %s\n", v, x)
 		return v, true
 	}
-	if call, ok := e.fallibleCall(o, val); ok {
+	if call, ok := e.fallibleCall(o, val, field); ok {
 		v := e.s.Name("v")
 		fmt.Fprintf(&e.b, "%s, %s := %s\n", v, e.errVar(), call)
 		e.check(field)
 		return v, true
 	}
 	return "", false
+}
+
+// gets applies the opGets o starts with to val, returning what is left of o
+// and the value it applies to.
+func gets(o op, val string) (op, string) {
+	if g, ok := o.(opGet); ok {
+		return gets(g.elem, method(val, "Get"))
+	}
+	return o, val
 }
 
 // expr renders o applied to val as one expression, when it can be one.
@@ -188,13 +199,18 @@ func (e *emitter) expr(o op, val string) (string, bool) {
 }
 
 // fallibleCall renders o applied to val as a call returning an error too, when
-// it is one.
-func (e *emitter) fallibleCall(o op, val string) (string, bool) {
+// it is one. The argument of validated.New may need statements, which are
+// written first, as value writes them.
+func (e *emitter) fallibleCall(o op, val, field string) (string, bool) {
 	switch o := o.(type) {
 	case opConv:
 		return e.callConv(o.c, val), o.c.fallible
 	case opCall:
 		return o.f.name + "(" + val + ")", o.f.fallible
+	case opNew:
+		arg := e.value(o.elem, val, o.value.TypeArgs().At(0), field)
+		return fmt.Sprintf("%s.New[%s](%s)", e.f.Qualifier(o.value.Obj().Pkg()), e.typ(o.value.TypeArgs().At(1)), arg),
+			true
 	}
 	return "", false
 }
@@ -203,16 +219,21 @@ func (e *emitter) fallibleCall(o op, val string) (string, bool) {
 // val.
 func (e *emitter) callConv(c conv, val string) string {
 	if c.method {
-		if strings.HasPrefix(val, "*") {
-			val = "(" + val + ")"
-		}
-		return val + "." + c.fn.Name() + "()"
+		return method(val, c.fn.Name())
 	}
 	name := c.fn.Name()
 	if q := e.f.Qualifier(c.fn.Pkg()); q != "" {
 		name = q + "." + name
 	}
 	return name + "(" + val + ")"
+}
+
+// method renders the call of the method name on val.
+func method(val, name string) string {
+	if strings.HasPrefix(val, "*") {
+		val = "(" + val + ")"
+	}
+	return val + "." + name + "()"
 }
 
 // errVar returns the name of the error variable.
@@ -233,11 +254,12 @@ func (e *emitter) check(field string) {
 // assign writes the statements that set target, of type dstT, to o applied to
 // val.
 func (e *emitter) assign(target string, o op, val string, dstT types.Type, field string) {
+	o, val = gets(o, val)
 	if x, ok := e.expr(o, val); ok {
 		fmt.Fprintf(&e.b, "%s = %s\n", target, x)
 		return
 	}
-	if call, ok := e.fallibleCall(o, val); ok {
+	if call, ok := e.fallibleCall(o, val, field); ok {
 		v := e.s.Name("v")
 		fmt.Fprintf(&e.b, "%s, %s := %s\n", v, e.errVar(), call)
 		e.check(field)

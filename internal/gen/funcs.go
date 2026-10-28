@@ -173,6 +173,12 @@ func (r *listReader) listsOf(pkg *packages.Package) ([]list, []diag.Diag) {
 	return ls, unmarked
 }
 
+// hasLists reports whether pkg marks a variable //kanna:converter.
+func hasLists(pkg *packages.Package) bool {
+	ls, _ := (&listReader{lists: make(map[string][]list)}).listsOf(pkg)
+	return len(ls) > 0
+}
+
 // listOf reads vs, which d marks //kanna:converter; diags are what
 // directive.Find said about it.
 func listOf(pkg *packages.Package, vs *ast.ValueSpec, d directive.Directive, diags []diag.Diag) list {

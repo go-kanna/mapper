@@ -282,6 +282,36 @@ func TestPlans_Diagnostics(t *testing.T) {
 	}
 }
 
+func TestPlans_Validated(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(loadAll(t, "./testdata/checked").Packages[0])
+
+	want := []string{
+		"TodoFromRow(src checked.TodoRow) checked.Todo\n" +
+			"  CompletedAt = .CompletedAt deref(addr(new[checked.CompletedAtRule](direct)))",
+		"SessionFromRow(src checked.SessionRow) checked.Session (fallible)",
+		"PageToLink(src checked.Page) checked.Link\n  URL = .URL get(conv:url.Parse)",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
+	}
+	wantDiags := []string{
+		"checked.go:86:2: error: SessionFromRow: cannot map checked.SessionRow.Token (*string)" +
+			" to checked.Session.Token (*private.Token)\n" +
+			"  add a func(*string) *private.Token to a //kanna:converter list\n" +
+			"  validated.New cannot make it here: its rule, private.tokenRule, is not exported",
+		"checked.go:85:2: error: TodoFromRow has to return an error:" +
+			" CompletedAt is made by validated.New[checked.CompletedAtRule], which can fail\n" +
+			"  declare it as TodoFromRow(checked.TodoRow) (checked.Todo, error)",
+		"checked.go:89:2: error: PageToLink has to return an error: URL is converted by url.Parse, which can fail\n" +
+			"  declare it as PageToLink(checked.Page) (checked.Link, error)",
+	}
+	if !slices.EqualFunc(diags, wantDiags, strings.HasSuffix) {
+		t.Errorf("diagnostics =\n%s\nwant ones ending in\n%s", strings.Join(diags, "\n"), strings.Join(wantDiags, "\n"))
+	}
+}
+
 func TestUnexported(t *testing.T) {
 	t.Parallel()
 

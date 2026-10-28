@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/model"
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/wire"
+	"github.com/go-kanna/validated"
 )
 
 // EmployeeToWire converts an employee for the API.
@@ -49,20 +50,26 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 			v12[i2] = e3.String()
 		}
 	}
+	var v14 *wire.Timestamp
+	if v15 := src.ReviewedAt; v15 != nil {
+		v14 = wire.NewTimestamp((*v15).Get())
+	}
 	return &wire.Employee{
-		Id:       src.ID.String(),
-		Name:     src.FullName,
-		Login:    string(src.Login),
-		HiredAt:  wire.NewTimestamp(src.HiredAt),
-		Home:     addressToWire(src.Home),
-		Offices:  v,
-		ByRegion: v3,
-		Manager:  v5,
-		Note:     src.Note,
-		Contact:  contactToWire(src.Contact),
-		Backup:   v7,
-		LeftAt:   v10,
-		Peers:    v12,
+		Id:         src.ID.String(),
+		Name:       src.FullName,
+		Login:      string(src.Login),
+		HiredAt:    wire.NewTimestamp(src.HiredAt),
+		Home:       addressToWire(src.Home),
+		Offices:    v,
+		ByRegion:   v3,
+		Manager:    v5,
+		Note:       src.Note,
+		Contact:    contactToWire(src.Contact),
+		Backup:     v7,
+		LeftAt:     v10,
+		Peers:      v12,
+		Grade:      src.Grade.Get(),
+		ReviewedAt: v14,
 	}
 }
 
@@ -121,20 +128,34 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 			v15[i2] = v17
 		}
 	}
+	v18, err := validated.New[model.GradeRule](e.Grade)
+	if err != nil {
+		return model.Employee{}, fmt.Errorf("map model.Employee.Grade: %w", err)
+	}
+	var v19 *model.ReviewedAt
+	if v20 := e.ReviewedAt; v20 != nil {
+		v21, err := validated.New[model.ReviewedAtRule](v20.AsTime())
+		if err != nil {
+			return model.Employee{}, fmt.Errorf("map model.Employee.ReviewedAt: %w", err)
+		}
+		v19 = &v21
+	}
 	return model.Employee{
-		ID:       v,
-		FullName: e.GetName(),
-		Login:    model.Login(e.Login),
-		HiredAt:  e.GetHiredAt().AsTime(),
-		Home:     addressToModel(e.Home),
-		Offices:  v2,
-		ByRegion: v4,
-		Manager:  v6,
-		Note:     e.Note,
-		Contact:  contactToModel(e.Contact),
-		Backup:   v9,
-		LeftAt:   v12,
-		Peers:    v15,
+		ID:         v,
+		FullName:   e.GetName(),
+		Login:      model.Login(e.Login),
+		HiredAt:    e.GetHiredAt().AsTime(),
+		Home:       addressToModel(e.Home),
+		Offices:    v2,
+		ByRegion:   v4,
+		Manager:    v6,
+		Note:       e.Note,
+		Contact:    contactToModel(e.Contact),
+		Backup:     v9,
+		LeftAt:     v12,
+		Peers:      v15,
+		Grade:      v18,
+		ReviewedAt: v19,
 	}, nil
 }
 

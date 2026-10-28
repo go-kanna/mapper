@@ -172,3 +172,51 @@ func TestOps_ReuseWrittenFunctions(t *testing.T) {
 		t.Errorf("written = %q, want %q", written, want)
 	}
 }
+
+// A validated value is read through Get and made with validated.New, what it
+// holds converted as any other value.
+func TestOps_Validated(t *testing.T) {
+	t.Parallel()
+
+	pkg := loadAll(t, "./testdata/checked").Packages[0]
+
+	tests := []struct{ src, dst, want string }{
+		{src: "CompletedAt", dst: "time.Time", want: "get(direct)"},
+		{src: "time.Time", dst: "CompletedAt", want: "new[checked.CompletedAtRule](direct) (fallible)"},
+
+		// nil stays nil, through the listed conversions.
+		{src: "*CompletedAt", dst: "*Timestamp", want: "deref(get(conv:NewTimestamp))"},
+		{
+			src: "*Timestamp", dst: "*CompletedAt",
+			want: "guard(addr(new[checked.CompletedAtRule](conv:(*Timestamp).AsTime))) (fallible)",
+		},
+		{src: "*CompletedAt", dst: "*time.Time", want: "deref(addr(get(direct)))"},
+		{src: "*time.Time", dst: "*CompletedAt", want: "deref(addr(new[checked.CompletedAtRule](direct))) (fallible)"},
+
+		// A value already checked is not checked again.
+		{src: "CompletedAt", dst: "*CompletedAt", want: "addr(direct)"},
+		{src: "Email", dst: "Website", want: "get(new[rules.URL](direct)) (fallible)"},
+
+		{src: "int32", dst: "Count", want: "new[checked.countRule](cast:int64) (fallible)"},
+		{src: "Count", dst: "int32", want: "none"},
+		{src: "[]Count", dst: "[]int64", want: "slice(get(direct))"},
+
+		// A listed conversion for the pair comes first.
+		{src: "string", dst: "Email", want: "conv:parseEmail (fallible)"},
+
+		// Another package's unexported rule cannot be named here.
+		{src: "string", dst: "private.Token", want: "none"},
+		{src: "private.Token", dst: "string", want: "get(direct)"},
+		{src: "string", dst: "private.Ticket", want: "none"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.src+" to "+tt.dst, func(t *testing.T) {
+			t.Parallel()
+
+			if ops, _ := gen.Ops(pkg, [2]string{tt.src, tt.dst}); ops[0] != tt.want {
+				t.Errorf("op = %s, want %s", ops[0], tt.want)
+			}
+		})
+	}
+}
