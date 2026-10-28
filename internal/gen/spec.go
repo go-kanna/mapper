@@ -130,7 +130,7 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 		}
 		dc, ds := declOf(pkg.Fset, fn, f.Doc)
 		diags = append(diags, ds...)
-		if len(ds) == 0 {
+		if !diag.HasErrors(ds) {
 			found = append(found, dc)
 		}
 	}
@@ -167,7 +167,7 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 	}
 
 	entries, ds := mapEntries(fset, doc)
-	if diags = append(diags, ds...); len(diags) > 0 {
+	if diags = append(diags, ds...); diag.HasErrors(diags) {
 		return decl{}, diags
 	}
 
@@ -184,7 +184,7 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 		doc:      strings.TrimSpace(doc.Text()),
 		pos:      pos,
 		entries:  entries,
-	}, nil
+	}, diags
 }
 
 // pairTypeProblem says why t cannot be the source or the destination of a

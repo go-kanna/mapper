@@ -213,6 +213,42 @@ func TestCommand_RemovesWhatNoInterfaceDeclares(t *testing.T) {
 	}
 }
 
+// A line that only looks like a directive is warned about and otherwise
+// ignored: the function is still generated, so the file stays even when it
+// declares nothing else.
+func TestCommand_KeepsOutputOnADirectiveWarning(t *testing.T) {
+	t.Parallel()
+
+	const src = "package app\n\nimport \"net/netip\"\n\n//kanna:mapper\ntype _ interface {\n" +
+		"\tToPB(Employee) *EmployeePB\n}\n\n//kanna:convert\nvar _ = []any{netip.Addr.String}\n"
+
+	tests := []struct{ name, line string }{
+		{name: "spaced", line: "// kanna:map Id=-"},
+		{name: "misspelled", line: "//kanna:mapp Id=-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := writeModule(t, map[string]string{"types.go": typesSrc, "mapper.go": src})
+			if code, _, stderr := run(t, dir); code != cli.ExitOK {
+				t.Fatalf("run = %d, stderr %q", code, stderr)
+			}
+
+			writeFile(t, filepath.Join(dir, "mapper.go"), strings.Replace(src, "\tToPB(", "\t"+tt.line+"\n\tToPB(", 1))
+			code, _, stderr := run(t, dir)
+			if code != cli.ExitOK || !strings.Contains(stderr, "is not recognized as a directive") {
+				t.Errorf("run = %d, stderr %q; want success with a warning", code, stderr)
+			}
+			got := readFile(t, filepath.Join(dir, "mapper_gen.go"))
+			if !strings.Contains(got, "func ToPB(src Employee) *EmployeePB {") {
+				t.Errorf("mapper_gen.go does not declare ToPB:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestCommand_ReportsWhatCannotBeMapped(t *testing.T) {
 	t.Parallel()
 
