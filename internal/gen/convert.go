@@ -1,6 +1,9 @@
 package gen
 
-import "go/types"
+import (
+	"go/types"
+	"strings"
+)
 
 // function is a function of the generated file: one a //kanna:mapper interface
 // declares, or one written for a pair of structs that no declaration maps.
@@ -67,14 +70,20 @@ type opMap struct {
 // opCast is a Go conversion, dst(v).
 type opCast struct{ dst types.Type }
 
-// opGet converts the value a validated.Value holds, read with its Get.
-type opGet struct{ elem op }
+// opGet converts the value a value type of kanna-value holds, read with its
+// accessor.
+type opGet struct {
+	accessor string
+	elem     op
+}
 
-// opNew converts the value to the T of value, a validated.Value[T, R], and
-// makes one of it with validated.New, which fails when R rejects it.
+// opNew converts the value to what a value type of kanna-value holds, held,
+// and makes one of it with the type's constructor, which fails when the type's
+// rule rejects it.
 type opNew struct {
-	value *types.Named
-	elem  op
+	ctor *types.Func
+	held types.Type
+	elem op
 }
 
 func (opDirect) fallible() bool  { return false }
@@ -141,16 +150,16 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		}
 	}
 
-	// Pointers come first, so that a validated value is copied to a pointer
-	// to it rather than read and checked again.
-	if v, ok := validatedValue(src); ok {
-		if e, ok := c.try(v.TypeArgs().At(0), dst, write); ok {
-			return opGet{e}, true
+	// Pointers come first, so that a value of a value type is copied to a
+	// pointer to it rather than read and checked again.
+	if v, ok := valueTypeOf(src); ok {
+		if e, ok := c.try(v.held, dst, write); ok {
+			return opGet{accessor: v.accessor, elem: e}, true
 		}
 	}
-	if v, ok := validatedValue(dst); ok && nameable(v.TypeArgs().At(1), c.pkg) {
-		if e, ok := c.try(src, v.TypeArgs().At(0), write); ok {
-			return opNew{value: v, elem: e}, true
+	if v, ok := valueTypeOf(dst); ok && v.callable(c.pkg) {
+		if e, ok := c.try(src, v.held, write); ok {
+			return opNew{ctor: v.ctor, held: v.held, elem: e}, true
 		}
 	}
 
@@ -178,28 +187,91 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	return nil, false
 }
 
-// validatedPath is the import path of the package declaring validated.Value,
-// which is recognized by name so that kanna-mapper does not depend on it.
-const validatedPath = "github.com/go-kanna/validated"
+// valueType is a value type as kanna-value generates one: a struct holding a
+// value in its one unexported field, read with the accessor named after the
+// value's type and made with the constructor beside it. kanna-mapper knows one
+// by that shape, as it may have only the types of the package declaring it, not
+// the //kanna:value in its source.
+type valueType struct {
+	named    *types.Named
+	held     types.Type
+	accessor string
 
-// validatedValue returns t as the validated.Value[T, R] it is, if it is one.
-func validatedValue(t types.Type) (*types.Named, bool) {
-	named, ok := types.Unalias(t).(*types.Named)
-	if !ok {
-		return nil, false
-	}
-	obj := named.Origin().Obj()
-	return named, obj.Pkg() != nil && obj.Pkg().Path() == validatedPath && obj.Name() == "Value"
+	// ctor is the constructor, NewX(T) (X, error), or nil when what is
+	// loaded of the package declaring X lacks it.
+	ctor *types.Func
 }
 
-// nameable reports whether code in pkg can name the rule r, which it has to
-// for validated.New: r is declared in pkg or exported.
-func nameable(r types.Type, pkg *types.Package) bool {
-	if p, ok := r.(*types.Pointer); ok {
-		r = p.Elem()
+// valueTypeOf returns t as the value type it is, if it is one.
+func valueTypeOf(t types.Type) (valueType, bool) {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.TypeParams().Len() > 0 {
+		return valueType{}, false
 	}
-	tn, ok := r.(interface{ Obj() *types.TypeName })
-	return !ok || tn.Obj().Exported() || tn.Obj().Pkg() == pkg
+	st, ok := named.Underlying().(*types.Struct)
+	if !ok || st.NumFields() != 1 || st.Field(0).Exported() || st.Field(0).Embedded() {
+		return valueType{}, false
+	}
+
+	held := st.Field(0).Type()
+	accessor, ok := accessorName(held)
+	if !ok {
+		return valueType{}, false
+	}
+	m, _, _ := types.LookupFieldOrMethod(named, false, nil, accessor)
+	fn, ok := m.(*types.Func)
+	if !ok || fn.Signature().Params().Len() != 0 || fn.Signature().Results().Len() != 1 ||
+		!types.Identical(fn.Signature().Results().At(0).Type(), held) {
+		return valueType{}, false
+	}
+	return valueType{named: named, held: held, accessor: accessor, ctor: constructorOf(named, held)}, true
+}
+
+// accessorName names the accessor of a value of type t as kanna-value does:
+// after the type, such as String for a string and Time for a time.Time.
+func accessorName(t types.Type) (string, bool) {
+	var name string
+	switch t := types.Unalias(t).(type) {
+	case *types.Basic:
+		name = t.Name()
+	case *types.Named:
+		name = t.Obj().Name()
+	default:
+		return "", false
+	}
+	return strings.ToUpper(name[:1]) + name[1:], true
+}
+
+// constructorOf returns the constructor of named, a value type holding a
+// held, NewX(T) (X, error) beside it, or nil.
+func constructorOf(named *types.Named, held types.Type) *types.Func {
+	fn, ok := named.Obj().Pkg().Scope().Lookup(constructorName(named.Obj())).(*types.Func)
+	if !ok {
+		return nil
+	}
+	sig := fn.Signature()
+	if sig.Params().Len() != 1 || sig.Results().Len() != 2 ||
+		!types.Identical(sig.Params().At(0).Type(), held) ||
+		!types.Identical(sig.Results().At(0).Type(), named) ||
+		!types.Identical(sig.Results().At(1).Type(), types.Universe.Lookup("error").Type()) {
+		return nil
+	}
+	return fn
+}
+
+// constructorName names the constructor of the value type obj names, exported
+// as the type is: NewX, or newX for an unexported x.
+func constructorName(obj *types.TypeName) string {
+	if obj.Exported() {
+		return "New" + obj.Name()
+	}
+	return "new" + strings.ToUpper(obj.Name()[:1]) + obj.Name()[1:]
+}
+
+// callable reports whether code in pkg can make a value of v: its constructor
+// is loaded, and declared in pkg or exported.
+func (v valueType) callable(pkg *types.Package) bool {
+	return v.ctor != nil && (v.ctor.Exported() || v.ctor.Pkg() == pkg)
 }
 
 // writable reports whether a function can be written for src and dst: both

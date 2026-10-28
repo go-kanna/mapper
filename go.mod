@@ -6,7 +6,7 @@ toolchain go1.26.9
 
 require (
 	github.com/go-kanna/internal v0.0.5
-	github.com/go-kanna/validated v0.0.2
+	github.com/go-kanna/value v0.0.1
 )
 
 require (

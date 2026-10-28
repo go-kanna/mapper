@@ -175,9 +175,19 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
 	}
 	d = d.WithHints(hint)
-	if v, ok := validatedValue(derefType(dstT)); ok && !nameable(v.TypeArgs().At(1), p.conv.pkg) {
-		d = d.WithHints(fmt.Sprintf("validated.New cannot make it here: its rule, %s, is not exported",
-			typeLabel(v.TypeArgs().At(1))))
+	if v, ok := valueTypeOf(derefType(dstT)); ok && !v.callable(p.conv.pkg) {
+		obj := v.named.Obj()
+		ctor := obj.Pkg().Name() + "." + constructorName(obj)
+		switch {
+		case !obj.Exported() && obj.Pkg() != p.conv.pkg:
+			d = d.WithHints(fmt.Sprintf("its constructor, %s, cannot be called here: it is not exported", ctor))
+		case obj.Pkg().Scope().Lookup(constructorName(obj)) == nil:
+			// Its package is seen only through another, whose export data
+			// carries the type but not the functions beside it.
+			d = d.WithHints(fmt.Sprintf("a value type of kanna-value is made by %s(%s) (%s, error), "+
+				"which this package does not see; list it in a //kanna:%s list",
+				ctor, typeLabel(v.held), typeLabel(v.named), converterKey))
+		}
 	}
 	if isInterface(srcT) || isInterface(dstT) {
 		d = d.WithHints("an interface field is mapped only as a protobuf oneof, " +
@@ -346,7 +356,7 @@ func causeOf(o op) (string, string) {
 	case opGet:
 		return causeOf(o.elem)
 	case opNew:
-		return "made by", "validated.New[" + typeLabel(o.value.TypeArgs().At(1)) + "]"
+		return "made by", funcLabel(o.ctor)
 	}
 	return "", ""
 }

@@ -299,9 +299,9 @@ func describeOp(o op) string {
 	case opCast:
 		return "cast:" + typeLabel(o.dst)
 	case opGet:
-		return "get(" + describeOp(o.elem) + ")"
+		return "get:" + o.accessor + "(" + describeOp(o.elem) + ")"
 	case opNew:
-		return "new[" + typeLabel(o.value.TypeArgs().At(1)) + "](" + describeOp(o.elem) + ")"
+		return "new:" + funcLabel(o.ctor) + "(" + describeOp(o.elem) + ")"
 	default:
 		return fmt.Sprintf("unknown %T", o)
 	}

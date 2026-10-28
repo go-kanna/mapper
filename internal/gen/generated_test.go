@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kanna/validated"
+	"github.com/go-kanna/value/rule"
 
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/mapper"
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/model"
@@ -32,8 +32,8 @@ func employee() model.Employee {
 		LeftAt:   new(time.Date(2026, time.March, 31, 18, 0, 0, 0, time.UTC)),
 		Peers:    []netip.Addr{netip.MustParseAddr("192.0.2.3")},
 
-		Grade:      validated.Must[model.GradeRule](3),
-		ReviewedAt: new(validated.Must[model.ReviewedAtRule](time.Date(2025, time.October, 1, 0, 0, 0, 0, time.UTC))),
+		Grade:      model.MustGrade(3),
+		ReviewedAt: new(model.MustReviewedAt(time.Date(2025, time.October, 1, 0, 0, 0, 0, time.UTC))),
 	}
 }
 
@@ -107,12 +107,12 @@ func TestGenerated_Errors(t *testing.T) {
 		{
 			name: "a value its rule rejects",
 			in:   &wire.Employee{Id: "192.0.2.1", Grade: -1},
-			want: "map model.Employee.Grade: validated: grade",
+			want: "map model.Employee.Grade: rule: grade",
 		},
 		{
 			name: "a value its rule rejects, behind a pointer",
 			in:   &wire.Employee{Id: "192.0.2.1", ReviewedAt: &wire.Timestamp{}},
-			want: "map model.Employee.ReviewedAt: validated: reviewed_at",
+			want: "map model.Employee.ReviewedAt: rule: reviewed_at",
 		},
 		{
 			name: "the manager",
@@ -137,8 +137,8 @@ func TestGenerated_RuleError(t *testing.T) {
 	t.Parallel()
 
 	_, err := mapper.EmployeeFromWire(&wire.Employee{Id: "192.0.2.1", Grade: -1})
-	if verr, ok := errors.AsType[*validated.Error](err); !ok || verr.Code() != "grade" {
-		t.Errorf("EmployeeFromWire() error = %v, want a *validated.Error with the code grade", err)
+	if rerr, ok := errors.AsType[*rule.Error](err); !ok || rerr.Code() != "grade" {
+		t.Errorf("EmployeeFromWire() error = %v, want a *rule.Error with the code grade", err)
 	}
 }
 

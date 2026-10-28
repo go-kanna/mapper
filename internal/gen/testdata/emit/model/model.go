@@ -6,35 +6,33 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/go-kanna/validated"
+	"github.com/go-kanna/value/rule"
 )
 
 // Login is a declared string, which converts to and from a plain one.
 type Login string
 
-// Grade holds what the wire holds, once GradeRule accepts it.
-type Grade = validated.Value[int32, GradeRule]
+// Grade holds what the wire holds, once its rule accepts it.
+//
+//kanna:value
+type Grade struct{ n int32 }
 
-// GradeRule accepts a grade that is not negative.
-type GradeRule struct{}
-
-func (GradeRule) Validate(n int32) error {
+func (Grade) validate(n int32) error {
 	if n < 0 {
-		return validated.Fail("grade")
+		return rule.Fail("grade")
 	}
 	return nil
 }
 
 // ReviewedAt holds a time from 2000 on, which the wire carries as a
 // timestamp.
-type ReviewedAt = validated.Value[time.Time, ReviewedAtRule]
+//
+//kanna:value
+type ReviewedAt struct{ t time.Time }
 
-// ReviewedAtRule accepts a time from 2000 on.
-type ReviewedAtRule struct{}
-
-func (ReviewedAtRule) Validate(t time.Time) error {
+func (ReviewedAt) validate(t time.Time) error {
 	if t.Year() < 2000 {
-		return validated.Fail("reviewed_at")
+		return rule.Fail("reviewed_at")
 	}
 	return nil
 }
