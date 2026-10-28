@@ -282,29 +282,40 @@ func TestPlans_Diagnostics(t *testing.T) {
 	}
 }
 
-func TestPlans_Validated(t *testing.T) {
+func TestPlans_ValueTypes(t *testing.T) {
 	t.Parallel()
 
 	found, diags := gen.Plans(loadAll(t, "./testdata/checked").Packages[0])
 
 	want := []string{
 		"TodoFromRow(src checked.TodoRow) checked.Todo\n" +
-			"  CompletedAt = .CompletedAt deref(addr(new[checked.CompletedAtRule](direct)))",
+			"  CompletedAt = .CompletedAt deref(addr(new:checked.NewCompletedAt(direct)))",
 		"SessionFromRow(src checked.SessionRow) checked.Session (fallible)",
-		"PageToLink(src checked.Page) checked.Link\n  URL = .URL get(conv:url.Parse)",
+		"PageToLink(src checked.Page) checked.Link\n  URL = .URL get:String(conv:url.Parse)",
+		"OddsFromRow(src checked.OddRow) checked.Odds (fallible)",
+		"HolderFromRow(src checked.LevelRow) mid.Holder (fallible)",
 	}
 	if !slices.Equal(found, want) {
 		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
 	}
 	wantDiags := []string{
-		"checked.go:86:2: error: SessionFromRow: cannot map checked.SessionRow.Token (*string)" +
+		"checked.go:117:2: error: SessionFromRow: cannot map checked.SessionRow.Token (*string)" +
 			" to checked.Session.Token (*private.Token)\n" +
 			"  add a func(*string) *private.Token to a //kanna:converter list\n" +
-			"  validated.New cannot make it here: its rule, private.tokenRule, is not exported",
-		"checked.go:85:2: error: TodoFromRow has to return an error:" +
-			" CompletedAt is made by validated.New[checked.CompletedAtRule], which can fail\n" +
+			"  its constructor, private.newToken, cannot be called here: it is not exported",
+		// Odd has an accessor but no constructor of kanna-value's, so only the
+		// function that does convert is hinted at.
+		"checked.go:122:2: error: OddsFromRow: cannot map checked.OddRow.N (int) to checked.Odds.N (checked.Odd)\n" +
+			"  NewOdd converts it; add it to a //kanna:converter list",
+		// Package deep is seen only through package mid, without NewLevel.
+		"checked.go:123:2: error: HolderFromRow: cannot map checked.LevelRow.Level (int) to mid.Holder.Level (deep.Level)\n" +
+			"  add a func(int) deep.Level to a //kanna:converter list\n" +
+			"  a value type of kanna-value is made by deep.NewLevel(int) (deep.Level, error), " +
+			"which this package does not see; list it in a //kanna:converter list",
+		"checked.go:116:2: error: TodoFromRow has to return an error:" +
+			" CompletedAt is made by checked.NewCompletedAt, which can fail\n" +
 			"  declare it as TodoFromRow(checked.TodoRow) (checked.Todo, error)",
-		"checked.go:89:2: error: PageToLink has to return an error: URL is converted by url.Parse, which can fail\n" +
+		"checked.go:120:2: error: PageToLink has to return an error: URL is converted by url.Parse, which can fail\n" +
 			"  declare it as PageToLink(checked.Page) (checked.Link, error)",
 	}
 	if !slices.EqualFunc(diags, wantDiags, strings.HasSuffix) {

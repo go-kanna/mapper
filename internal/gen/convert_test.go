@@ -173,41 +173,45 @@ func TestOps_ReuseWrittenFunctions(t *testing.T) {
 	}
 }
 
-// A validated value is read through Get and made with validated.New, what it
-// holds converted as any other value.
-func TestOps_Validated(t *testing.T) {
+// A value type of kanna-value is read through its accessor and made with its
+// constructor, what it holds converted as any other value.
+func TestOps_ValueTypes(t *testing.T) {
 	t.Parallel()
 
 	pkg := loadAll(t, "./testdata/checked").Packages[0]
 
 	tests := []struct{ src, dst, want string }{
-		{src: "CompletedAt", dst: "time.Time", want: "get(direct)"},
-		{src: "time.Time", dst: "CompletedAt", want: "new[checked.CompletedAtRule](direct) (fallible)"},
+		{src: "CompletedAt", dst: "time.Time", want: "get:Time(direct)"},
+		{src: "time.Time", dst: "CompletedAt", want: "new:checked.NewCompletedAt(direct) (fallible)"},
 
 		// nil stays nil, through the listed conversions.
-		{src: "*CompletedAt", dst: "*Timestamp", want: "deref(get(conv:NewTimestamp))"},
+		{src: "*CompletedAt", dst: "*Timestamp", want: "deref(get:Time(conv:NewTimestamp))"},
 		{
 			src: "*Timestamp", dst: "*CompletedAt",
-			want: "guard(addr(new[checked.CompletedAtRule](conv:(*Timestamp).AsTime))) (fallible)",
+			want: "guard(addr(new:checked.NewCompletedAt(conv:(*Timestamp).AsTime))) (fallible)",
 		},
-		{src: "*CompletedAt", dst: "*time.Time", want: "deref(addr(get(direct)))"},
-		{src: "*time.Time", dst: "*CompletedAt", want: "deref(addr(new[checked.CompletedAtRule](direct))) (fallible)"},
+		{src: "*CompletedAt", dst: "*time.Time", want: "deref(addr(get:Time(direct)))"},
+		{src: "*time.Time", dst: "*CompletedAt", want: "deref(addr(new:checked.NewCompletedAt(direct))) (fallible)"},
 
 		// A value already checked is not checked again.
 		{src: "CompletedAt", dst: "*CompletedAt", want: "addr(direct)"},
-		{src: "Email", dst: "Website", want: "get(new[rules.URL](direct)) (fallible)"},
+		{src: "Email", dst: "Website", want: "get:String(new:checked.NewWebsite(direct)) (fallible)"},
 
-		{src: "int32", dst: "Count", want: "new[checked.countRule](cast:int64) (fallible)"},
+		{src: "int32", dst: "Count", want: "new:checked.newCount(cast:int64) (fallible)"},
 		{src: "Count", dst: "int32", want: "none"},
-		{src: "[]Count", dst: "[]int64", want: "slice(get(direct))"},
+		{src: "[]Count", dst: "[]int64", want: "slice(get:Int64(direct))"},
 
 		// A listed conversion for the pair comes first.
 		{src: "string", dst: "Email", want: "conv:parseEmail (fallible)"},
 
-		// Another package's unexported rule cannot be named here.
+		// Another package's unexported constructor cannot be called here.
 		{src: "string", dst: "private.Token", want: "none"},
-		{src: "private.Token", dst: "string", want: "get(direct)"},
-		{src: "string", dst: "private.Ticket", want: "none"},
+		{src: "private.Token", dst: "string", want: "get:String(direct)"},
+
+		// The shape of a value type, without what kanna-value would write.
+		{src: "Odd", dst: "int", want: "get:Int(direct)"},
+		{src: "int", dst: "Odd", want: "none"},
+		{src: "Pair", dst: "[]string", want: "none"},
 	}
 
 	for _, tt := range tests {

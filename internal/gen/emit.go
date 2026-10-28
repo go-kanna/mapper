@@ -178,7 +178,7 @@ func (e *emitter) addressable(o op, val, field string) (string, bool) {
 // and the value it applies to.
 func gets(o op, val string) (op, string) {
 	if g, ok := o.(opGet); ok {
-		return gets(g.elem, method(val, "Get"))
+		return gets(g.elem, method(val, g.accessor))
 	}
 	return o, val
 }
@@ -199,8 +199,8 @@ func (e *emitter) expr(o op, val string) (string, bool) {
 }
 
 // fallibleCall renders o applied to val as a call returning an error too, when
-// it is one. The argument of validated.New may need statements, which are
-// written first, as value writes them.
+// it is one. The argument of a value type's constructor may need statements,
+// which are written first, as value writes them.
 func (e *emitter) fallibleCall(o op, val, field string) (string, bool) {
 	switch o := o.(type) {
 	case opConv:
@@ -208,9 +208,11 @@ func (e *emitter) fallibleCall(o op, val, field string) (string, bool) {
 	case opCall:
 		return o.f.name + "(" + val + ")", o.f.fallible
 	case opNew:
-		arg := e.value(o.elem, val, o.value.TypeArgs().At(0), field)
-		return fmt.Sprintf("%s.New[%s](%s)", e.f.Qualifier(o.value.Obj().Pkg()), e.typ(o.value.TypeArgs().At(1)), arg),
-			true
+		name := o.ctor.Name()
+		if q := e.f.Qualifier(o.ctor.Pkg()); q != "" {
+			name = q + "." + name
+		}
+		return name + "(" + e.value(o.elem, val, o.held, field) + ")", true
 	}
 	return "", false
 }

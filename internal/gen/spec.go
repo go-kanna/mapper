@@ -292,3 +292,8 @@ func duplicates(found []decl) []diag.Diag {
 func typeLabel(t types.Type) string {
 	return types.TypeString(t, func(p *types.Package) string { return p.Name() })
 }
+
+// funcLabel spells fn with its package's name, as messages do.
+func funcLabel(fn *types.Func) string {
+	return qualifiedName(fn, func(p *types.Package) string { return p.Name() })
+}

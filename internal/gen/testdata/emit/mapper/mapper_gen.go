@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/model"
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/wire"
-	"github.com/go-kanna/validated"
 )
 
 // EmployeeToWire converts an employee for the API.
@@ -52,7 +51,7 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 	}
 	var v14 *wire.Timestamp
 	if v15 := src.ReviewedAt; v15 != nil {
-		v14 = wire.NewTimestamp((*v15).Get())
+		v14 = wire.NewTimestamp((*v15).Time())
 	}
 	return &wire.Employee{
 		Id:         src.ID.String(),
@@ -68,7 +67,7 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		Backup:     v7,
 		LeftAt:     v10,
 		Peers:      v12,
-		Grade:      src.Grade.Get(),
+		Grade:      src.Grade.Int32(),
 		ReviewedAt: v14,
 	}
 }
@@ -128,13 +127,13 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 			v15[i2] = v17
 		}
 	}
-	v18, err := validated.New[model.GradeRule](e.Grade)
+	v18, err := model.NewGrade(e.Grade)
 	if err != nil {
 		return model.Employee{}, fmt.Errorf("map model.Employee.Grade: %w", err)
 	}
 	var v19 *model.ReviewedAt
 	if v20 := e.ReviewedAt; v20 != nil {
-		v21, err := validated.New[model.ReviewedAtRule](v20.AsTime())
+		v21, err := model.NewReviewedAt(v20.AsTime())
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.ReviewedAt: %w", err)
 		}
