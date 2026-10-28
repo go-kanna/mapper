@@ -39,6 +39,9 @@ type Employee struct {
 	LeftAt   *Timestamp
 	Peers    []string
 	Revision int32
+
+	Grade      int32
+	ReviewedAt *Timestamp
 }
 
 // GetBackup reads a proto3 optional field: nil becomes "".

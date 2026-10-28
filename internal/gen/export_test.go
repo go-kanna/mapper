@@ -136,7 +136,7 @@ func eval(pkg *packages.Package, expr string) types.Type {
 func Plans(pkg *packages.Package) ([]string, []string) {
 	ds, _ := decls(pkg)
 	cs, _, _ := convsOf(pkg, nil, ds)
-	plans, diags := planFuncs(pkg.Fset, ds, cs, declaredNames(pkg))
+	plans, diags := planFuncs(pkg, ds, cs, declaredNames(pkg))
 
 	out := make([]string, len(plans))
 	for i, pl := range plans {
@@ -188,7 +188,7 @@ func Emit(pkg *packages.Package, loaded []*packages.Package, declared map[string
 		byPath[p.PkgPath] = p
 	}
 	cs, _, cd := convsOf(pkg, byPath, ds)
-	plans, pd := planFuncs(pkg.Fset, ds, cs, declared)
+	plans, pd := planFuncs(pkg, ds, cs, declared)
 	if diags = append(append(diags, cd...), pd...); diag.HasErrors(diags) {
 		return nil, spell(diags), nil
 	}
@@ -237,7 +237,7 @@ func Ops(pkg *packages.Package, pairs ...[2]string) (ops, written []string) {
 	for i := range ds {
 		funcs.fs = append(funcs.fs, &function{name: ds[i].name, src: ds[i].src, dst: ds[i].dst, decl: &ds[i]})
 	}
-	c := converter{convs: cs, funcs: funcs}
+	c := converter{pkg: pkg.Types, convs: cs, funcs: funcs}
 
 	for _, p := range pairs {
 		o, ok := c.op(eval(pkg, p[0]), eval(pkg, p[1]))
@@ -298,6 +298,10 @@ func describeOp(o op) string {
 		return "map(" + describeOp(o.elem) + ")"
 	case opCast:
 		return "cast:" + typeLabel(o.dst)
+	case opGet:
+		return "get(" + describeOp(o.elem) + ")"
+	case opNew:
+		return "new[" + typeLabel(o.value.TypeArgs().At(1)) + "](" + describeOp(o.elem) + ")"
 	default:
 		return fmt.Sprintf("unknown %T", o)
 	}

@@ -67,6 +67,16 @@ type opMap struct {
 // opCast is a Go conversion, dst(v).
 type opCast struct{ dst types.Type }
 
+// opGet converts the value a validated.Value holds, read with its Get.
+type opGet struct{ elem op }
+
+// opNew converts the value to the T of value, a validated.Value[T, R], and
+// makes one of it with validated.New, which fails when R rejects it.
+type opNew struct {
+	value *types.Named
+	elem  op
+}
+
 func (opDirect) fallible() bool  { return false }
 func (o opConv) fallible() bool  { return o.c.fallible }
 func (o opCall) fallible() bool  { return o.f.fallible }
@@ -76,9 +86,12 @@ func (o opGuard) fallible() bool { return o.elem.fallible() }
 func (o opSlice) fallible() bool { return o.elem.fallible() }
 func (o opMap) fallible() bool   { return o.elem.fallible() }
 func (opCast) fallible() bool    { return false }
+func (o opGet) fallible() bool   { return o.elem.fallible() }
+func (opNew) fallible() bool     { return true }
 
 // converter works out ops from what a package lists and declares.
 type converter struct {
+	pkg   *types.Package // the package generated into
 	convs convs
 	funcs functions
 }
@@ -128,6 +141,19 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		}
 	}
 
+	// Pointers come first, so that a validated value is copied to a pointer
+	// to it rather than read and checked again.
+	if v, ok := validatedValue(src); ok {
+		if e, ok := c.try(v.TypeArgs().At(0), dst, write); ok {
+			return opGet{e}, true
+		}
+	}
+	if v, ok := validatedValue(dst); ok && nameable(v.TypeArgs().At(1), c.pkg) {
+		if e, ok := c.try(src, v.TypeArgs().At(0), write); ok {
+			return opNew{value: v, elem: e}, true
+		}
+	}
+
 	if ss, ok := src.Underlying().(*types.Slice); ok {
 		if ds, ok := dst.Underlying().(*types.Slice); ok {
 			if e, ok := c.try(ss.Elem(), ds.Elem(), write); ok {
@@ -150,6 +176,30 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		return opCall{c.funcs.write(src, dst)}, true
 	}
 	return nil, false
+}
+
+// validatedPath is the import path of the package declaring validated.Value,
+// which is recognized by name so that kanna-mapper does not depend on it.
+const validatedPath = "github.com/go-kanna/validated"
+
+// validatedValue returns t as the validated.Value[T, R] it is, if it is one.
+func validatedValue(t types.Type) (*types.Named, bool) {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok {
+		return nil, false
+	}
+	obj := named.Origin().Obj()
+	return named, obj.Pkg() != nil && obj.Pkg().Path() == validatedPath && obj.Name() == "Value"
+}
+
+// nameable reports whether code in pkg can name the rule r, which it has to
+// for validated.New: r is declared in pkg or exported.
+func nameable(r types.Type, pkg *types.Package) bool {
+	if p, ok := r.(*types.Pointer); ok {
+		r = p.Elem()
+	}
+	tn, ok := r.(interface{ Obj() *types.TypeName })
+	return !ok || tn.Obj().Exported() || tn.Obj().Pkg() == pkg
 }
 
 // writable reports whether a function can be written for src and dst: both

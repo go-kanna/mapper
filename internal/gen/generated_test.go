@@ -1,11 +1,14 @@
 package gen_test
 
 import (
+	"errors"
 	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kanna/validated"
 
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/mapper"
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/model"
@@ -28,6 +31,9 @@ func employee() model.Employee {
 		Backup:   new(netip.MustParseAddr("192.0.2.9")),
 		LeftAt:   new(time.Date(2026, time.March, 31, 18, 0, 0, 0, time.UTC)),
 		Peers:    []netip.Addr{netip.MustParseAddr("192.0.2.3")},
+
+		Grade:      validated.Must[model.GradeRule](3),
+		ReviewedAt: new(validated.Must[model.ReviewedAtRule](time.Date(2025, time.October, 1, 0, 0, 0, 0, time.UTC))),
 	}
 }
 
@@ -58,7 +64,7 @@ func TestGenerated_Nil(t *testing.T) {
 
 	w := mapper.EmployeeToWire(model.Employee{})
 	if w.Manager != nil || w.Offices != nil || w.ByRegion != nil || w.Note != nil || w.Contact.GetKind() != nil ||
-		w.Backup != nil || w.LeftAt != nil || w.Peers != nil {
+		w.Backup != nil || w.LeftAt != nil || w.Peers != nil || w.ReviewedAt != nil {
 		t.Errorf("EmployeeToWire(zero) = %+v, want nil fields and no contact arm", w)
 	}
 
@@ -70,8 +76,10 @@ func TestGenerated_Nil(t *testing.T) {
 	// AsTime makes a missing timestamp the Unix epoch, as the README says,
 	// but a pointer to fill stays nil.
 	got, err = mapper.EmployeeFromWire(&wire.Employee{Id: "192.0.2.1"})
-	if err != nil || !got.HiredAt.Equal(time.Unix(0, 0)) || got.LeftAt != nil || got.Backup != nil {
-		t.Errorf("EmployeeFromWire() = %+v, %v, want HiredAt the Unix epoch and LeftAt and Backup nil", got, err)
+	if err != nil || !got.HiredAt.Equal(time.Unix(0, 0)) || got.LeftAt != nil || got.Backup != nil ||
+		got.ReviewedAt != nil {
+		t.Errorf("EmployeeFromWire() = %+v, %v, want HiredAt the Unix epoch and LeftAt, Backup, and ReviewedAt nil",
+			got, err)
 	}
 }
 
@@ -97,6 +105,16 @@ func TestGenerated_Errors(t *testing.T) {
 			want: "map model.Employee.Peers: ",
 		},
 		{
+			name: "a value its rule rejects",
+			in:   &wire.Employee{Id: "192.0.2.1", Grade: -1},
+			want: "map model.Employee.Grade: validated: grade",
+		},
+		{
+			name: "a value its rule rejects, behind a pointer",
+			in:   &wire.Employee{Id: "192.0.2.1", ReviewedAt: &wire.Timestamp{}},
+			want: "map model.Employee.ReviewedAt: validated: reviewed_at",
+		},
+		{
 			name: "the manager",
 			in:   &wire.Employee{Id: "192.0.2.1", Manager: &wire.Employee{Id: "nope"}},
 			want: "map model.Employee.Manager: map model.Employee.ID: ",
@@ -111,6 +129,16 @@ func TestGenerated_Errors(t *testing.T) {
 				t.Errorf("EmployeeFromWire() error = %v, want it to start with %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// A rule's rejection reaches the caller as the rule's own error, wrapped.
+func TestGenerated_RuleError(t *testing.T) {
+	t.Parallel()
+
+	_, err := mapper.EmployeeFromWire(&wire.Employee{Id: "192.0.2.1", Grade: -1})
+	if verr, ok := errors.AsType[*validated.Error](err); !ok || verr.Code() != "grade" {
+		t.Errorf("EmployeeFromWire() error = %v, want a *validated.Error with the code grade", err)
 	}
 }
 

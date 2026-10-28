@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/go-kanna/internal/diag"
+	"github.com/go-kanna/internal/packages"
 )
 
 // plan is the body of one function: how each field of its destination is
@@ -55,12 +56,12 @@ type planner struct {
 	field string
 }
 
-// planFuncs plans the functions ds declares and the ones written for them,
-// in that order, converting with cs. declared holds the top-level names the
-// package declares outside the generated file, which no function may take.
-func planFuncs(fset *token.FileSet, ds []decl, cs convs, declared map[string]token.Position) ([]*plan, []diag.Diag) {
-	p := &planner{fset: fset, taken: make(map[string]bool), sites: make(map[*function]site)}
-	p.conv = converter{convs: cs, funcs: p}
+// planFuncs plans the functions ds declares in pkg and the ones written for
+// them, in that order, converting with cs. declared holds the top-level names
+// the package declares outside the generated file, which no function may take.
+func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]token.Position) ([]*plan, []diag.Diag) {
+	p := &planner{fset: pkg.Fset, taken: make(map[string]bool), sites: make(map[*function]site)}
+	p.conv = converter{pkg: pkg.Types, convs: cs, funcs: p}
 	for name := range declared {
 		p.taken[name] = true
 	}
@@ -174,11 +175,23 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
 	}
 	d = d.WithHints(hint)
+	if v, ok := validatedValue(derefType(dstT)); ok && !nameable(v.TypeArgs().At(1), p.conv.pkg) {
+		d = d.WithHints(fmt.Sprintf("validated.New cannot make it here: its rule, %s, is not exported",
+			typeLabel(v.TypeArgs().At(1))))
+	}
 	if isInterface(srcT) || isInterface(dstT) {
 		d = d.WithHints("an interface field is mapped only as a protobuf oneof, " +
 			"whose arms are single-field structs implementing it")
 	}
 	return d
+}
+
+// derefType returns what t points to, or t when it is not a pointer.
+func derefType(t types.Type) types.Type {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		return p.Elem()
+	}
+	return t
 }
 
 func isInterface(t types.Type) bool {
@@ -330,6 +343,10 @@ func causeOf(o op) (string, string) {
 		return causeOf(o.elem)
 	case opMap:
 		return causeOf(o.elem)
+	case opGet:
+		return causeOf(o.elem)
+	case opNew:
+		return "made by", "validated.New[" + typeLabel(o.value.TypeArgs().At(1)) + "]"
 	}
 	return "", ""
 }
