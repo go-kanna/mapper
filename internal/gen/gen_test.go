@@ -206,11 +206,69 @@ func TestCommand_RemovesWhatNoInterfaceDeclares(t *testing.T) {
 	// The last interface loses the directive.
 	writeFile(t, filepath.Join(dir, "mapper.go"), strings.Replace(mapperSrc, "//kanna:mapper\n", "", 1))
 	code, _, stderr := run(t, dir)
-	if code != cli.ExitOK || !strings.Contains(stderr, "warning: no interface is marked //kanna:mapper in .") {
+	if want := "warning: no interface is marked //kanna:mapper in example.com/app\n"; code != cli.ExitOK ||
+		!strings.Contains(stderr, want) {
 		t.Errorf("run = %d, stderr %q; want success with a warning", code, stderr)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "mapper_gen.go")); !os.IsNotExist(err) {
 		t.Errorf("mapper_gen.go is left, or cannot be checked: %v", err)
+	}
+}
+
+// The warning names packages by import path: go generate ./... runs each in
+// its own directory, where "." names them all alike.
+func TestCommand_WarnsWhenNothingIsMarked(t *testing.T) {
+	t.Parallel()
+
+	const listsHint = "  a package holding only //kanna:converter lists needs no //go:generate line;" +
+		" the packages naming its lists read them\n"
+
+	files := func() map[string]string {
+		return map[string]string{
+			"model/model.go": "package model\n\ntype Employee struct{ Name string }\n",
+			"docs/README.md": "# Docs\n",
+			"convert/convert.go": "package convert\n\nimport \"strconv\"\n\n" +
+				"//kanna:converter\nvar Defaults = []any{strconv.Itoa}\n",
+		}
+	}
+	tests := []struct {
+		name, in string
+		args     []string
+		want     string
+	}{
+		{
+			name: "a package",
+			in:   "model",
+			want: "warning: no interface is marked //kanna:mapper in example.com/app/model\n",
+		},
+		{
+			name: "a package holding only lists",
+			in:   "convert",
+			want: "warning: no interface is marked //kanna:mapper in example.com/app/convert\n" + listsHint,
+		},
+		{
+			name: "several packages",
+			args: []string{"./..."},
+			want: "warning: no interface is marked //kanna:mapper in example.com/app/convert, example.com/app/model\n" +
+				listsHint,
+		},
+		{
+			name: "no package",
+			args: []string{"./docs/..."},
+			want: "warning: no interface is marked //kanna:mapper in ./docs/...\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := writeModule(t, files())
+			code, stdout, stderr := run(t, filepath.Join(dir, tt.in), tt.args...)
+			if code != cli.ExitOK || stdout != "" || stderr != tt.want {
+				t.Errorf("run = %d, stdout %q, stderr\n%s\nwant\n%s", code, stdout, stderr, tt.want)
+			}
+		})
 	}
 }
 

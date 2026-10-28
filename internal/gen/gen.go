@@ -2,6 +2,7 @@ package gen
 
 import (
 	"flag"
+	"fmt"
 	"go/token"
 	"maps"
 	"path/filepath"
@@ -55,7 +56,7 @@ func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Dia
 	for {
 		changes, missing, ds := generate(set, targets)
 		if len(missing) == 0 {
-			return changes, append(diags, noTarget(changes, ds, patterns)...)
+			return changes, append(diags, noTarget(set, targets, changes, ds, patterns)...)
 		}
 		if slices.ContainsFunc(missing, func(p string) bool { return slices.Contains(extra, p) }) {
 			return nil, append(diags, diag.Errorf(token.Position{}, "cannot read the lists of %s",
@@ -89,16 +90,36 @@ func load(patterns []string, pc packages.Config) (packages.Set, []diag.Diag, boo
 }
 
 // noTarget warns that a run found nothing to generate: a go:generate line left
-// behind does no harm, but says nothing either.
-func noTarget(changes []output.Change, diags []diag.Diag, patterns []string) []diag.Diag {
+// behind does no harm, but says nothing either. The packages of set that
+// targets names are named by import path, since go generate runs each in its
+// own directory, where "." would name them all alike; the patterns only when
+// they matched none.
+func noTarget(set packages.Set, targets map[string]bool, changes []output.Change, diags []diag.Diag,
+	patterns []string,
+) []diag.Diag {
 	if diag.HasErrors(diags) || slices.ContainsFunc(changes, func(c output.Change) bool { return !c.Remove }) {
 		return diags
 	}
-	in := strings.Join(patterns, " ")
-	if in == "" {
-		in = "."
+	var (
+		paths []string
+		lists bool
+	)
+	for _, pkg := range set.Packages {
+		if targets[pkg.PkgPath] {
+			paths = append(paths, pkg.PkgPath)
+			lists = lists || hasLists(pkg)
+		}
 	}
-	return append(diags, diag.Warningf(token.Position{}, "no interface is marked //kanna:%s in %s", mapperKey, in))
+	in := strings.Join(paths, ", ")
+	if len(paths) == 0 {
+		in = strings.Join(patterns, " ")
+	}
+	d := diag.Warningf(token.Position{}, "no interface is marked //kanna:%s in %s", mapperKey, in)
+	if lists {
+		d = d.WithHints(fmt.Sprintf("a package holding only //kanna:%s lists needs no //go:generate line;"+
+			" the packages naming its lists read them", converterKey))
+	}
+	return append(diags, d)
 }
 
 // generate works out the changes for the packages of set that targets names:

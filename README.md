@@ -211,7 +211,8 @@ var _ = []any{
 ```
 
 An entry naming a list must name one marked `//kanna:converter`. A function a shared list brings in has to be callable
-from the package using it, so an unexported one is an error there. The same function arriving twice counts once.
+from the package using it, so an unexported one is an error there. The same function arriving twice counts once. A
+package holding only lists, such as `convert`, needs no `//go:generate` line: the packages naming its lists read them.
 
 When two different functions convert the same pair, the nearer one wins, as with fields promoted through embedding: the
 package's own lists and its declared functions first, then the lists they name, then the lists those name. Two at the
@@ -396,9 +397,9 @@ kanna-mapper [flags] [packages]
 | `-version`      | print the version                                                                            |
 
 The packages default to the one in the current directory, so `//go:generate go tool kanna-mapper` needs no argument.
-A run that succeeds prints nothing; one that finds no `//kanna:mapper` interface at all warns. A package whose
-interfaces have all lost `//kanna:mapper` has its `mapper_gen.go` removed; a file of that name without the
-generated-code header is never touched.
+A run that succeeds prints nothing; one that finds no `//kanna:mapper` interface at all warns, naming the packages by
+import path. A package whose interfaces have all lost `//kanna:mapper` has its `mapper_gen.go` removed; a file of that
+name without the generated-code header is never touched.
 
 ## Example
 
