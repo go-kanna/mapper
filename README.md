@@ -23,7 +23,7 @@ There is no runtime to import: the generated code calls your types, the function
 ## Use
 
 Declare the functions you want as the methods of an interface marked `//kanna:mapper`, and list the conversions Go
-cannot do by itself in a `//kanna:convert` list:
+cannot do by itself in a `//kanna:converter` list:
 
 ```go
 package mapper
@@ -45,7 +45,7 @@ type _ interface {
 	EmployeeFromProto(*employeev1.Employee) (model.Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	uuid.UUID.String,
 	uuid.Parse,
@@ -126,7 +126,7 @@ $ go generate ./...
 ./mapper.go:15:2: error: EmployeeToProto: no source in model.Employee for employeev1.Employee.Revision
   add map:"Revision" to the field of model.Employee that fills it, or leave it zero with //kanna:map Revision=-
 ./mapper.go:15:2: error: EmployeeToProto: cannot map model.Employee.Status (model.Status) to employeev1.Employee.Status (employeev1.Status)
-  add a func(model.Status) employeev1.Status to a //kanna:convert list
+  add a func(model.Status) employeev1.Status to a //kanna:converter list
 ./mapper.go:16:2: error: EmployeeFromProto has to return an error: ID is converted by uuid.Parse, which can fail
   declare it as EmployeeFromProto(*employeev1.Employee) (model.Employee, error)
 ```
@@ -163,7 +163,7 @@ reported at the declaration that led to it, with the path:
 
 ## Conversions
 
-A `//kanna:convert` list names the functions that convert one type to another when Go cannot:
+A `//kanna:converter` list names the functions that convert one type to another when Go cannot:
 
 - a function of any package, by name: `uuid.Parse`, `timestamppb.New`, or one of your own;
 - a method, as a method expression: `uuid.UUID.String`, `(*timestamppb.Timestamp).AsTime`.
@@ -188,7 +188,7 @@ application uses everywhere once:
 ```go
 package convert
 
-//kanna:convert
+//kanna:converter
 var Defaults = []any{
 	uuid.UUID.String,
 	uuid.Parse,
@@ -202,14 +202,14 @@ and use them in each package that maps, such as the handlers of one service:
 ```go
 package billing
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	convert.Defaults,
 	statusToProto,
 }
 ```
 
-An entry naming a list must name one marked `//kanna:convert`. A function a shared list brings in has to be callable
+An entry naming a list must name one marked `//kanna:converter`. A function a shared list brings in has to be callable
 from the package using it, so an unexported one is an error there. The same function arriving twice counts once.
 
 When two different functions convert the same pair, the nearer one wins, as with fields promoted through embedding: the

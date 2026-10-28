@@ -24,7 +24,7 @@ type _ interface {
 	EmployeeFromProto(emp *employeev1.Employee) (model.Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	convert.Defaults,
 	statusToProto,

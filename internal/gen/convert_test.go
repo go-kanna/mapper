@@ -37,7 +37,7 @@ type _ interface {
 	AddressToPB(Address) *AddressPB
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	netip.ParseAddr,
 	netip.Addr.String,
