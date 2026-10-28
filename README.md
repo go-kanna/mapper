@@ -233,7 +233,7 @@ Each destination field takes the first rule that matches.
 A destination field with no source is an error, not a silent zero value. A field tagged `map:"-"` takes no part in
 mapping, in either direction. A tag on a promoted field keeps applying: a field excluded or renamed in an embedded
 struct is not matched by its name. Neither is a field promoted through an embedded pointer, which would panic to read
-when the pointer is nil.
+when the pointer is nil, or through an embedded field tagged `map:"-"`.
 
 A struct mapped to several types may carry a tag naming a field only some of them have, so a tag naming none of a
 destination's fields is no error by itself. When a destination field has no source and a source field's tag nearly names

@@ -137,6 +137,13 @@ func TestMatches_Diagnostics(t *testing.T) {
 			want: "test.go:9:2: error: F: no source in test.S for test.D.Secret",
 		},
 		{
+			name: "an embedded field tagged out",
+			types: "type Base struct{ Secret string }\n" +
+				"type S struct{ Base `map:\"-\"`; Name string }\n" +
+				"type D struct{ Secret, Name string }",
+			want: "test.go:9:2: error: F: no source in test.S for test.D.Secret",
+		},
+		{
 			// Reading it would panic when the pointer is nil.
 			name:  "a field promoted through a pointer",
 			types: "type Base struct{ Created string }\ntype S struct{ *Base }\ntype D struct{ Created string }",
