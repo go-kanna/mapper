@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -213,6 +214,42 @@ func TestCommand_RemovesWhatNoInterfaceDeclares(t *testing.T) {
 	}
 }
 
+// A line that only looks like a directive is warned about and otherwise
+// ignored: the function is still generated, so the file stays even when it
+// declares nothing else.
+func TestCommand_KeepsOutputOnADirectiveWarning(t *testing.T) {
+	t.Parallel()
+
+	const src = "package app\n\nimport \"net/netip\"\n\n//kanna:mapper\ntype _ interface {\n" +
+		"\tToPB(Employee) *EmployeePB\n}\n\n//kanna:convert\nvar _ = []any{netip.Addr.String}\n"
+
+	tests := []struct{ name, line string }{
+		{name: "spaced", line: "// kanna:map Id=-"},
+		{name: "misspelled", line: "//kanna:mapp Id=-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := writeModule(t, map[string]string{"types.go": typesSrc, "mapper.go": src})
+			if code, _, stderr := run(t, dir); code != cli.ExitOK {
+				t.Fatalf("run = %d, stderr %q", code, stderr)
+			}
+
+			writeFile(t, filepath.Join(dir, "mapper.go"), strings.Replace(src, "\tToPB(", "\t"+tt.line+"\n\tToPB(", 1))
+			code, _, stderr := run(t, dir)
+			if code != cli.ExitOK || !strings.Contains(stderr, "is not recognized as a directive") {
+				t.Errorf("run = %d, stderr %q; want success with a warning", code, stderr)
+			}
+			got := readFile(t, filepath.Join(dir, "mapper_gen.go"))
+			if !strings.Contains(got, "func ToPB(src Employee) *EmployeePB {") {
+				t.Errorf("mapper_gen.go does not declare ToPB:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestCommand_ReportsWhatCannotBeMapped(t *testing.T) {
 	t.Parallel()
 
@@ -281,5 +318,35 @@ func TestCommand_ReportsLoadErrors(t *testing.T) {
 	}
 	if code != cli.ExitFailure {
 		t.Errorf("run = %d, want %d", code, cli.ExitFailure)
+	}
+}
+
+// Packages are generated apart: an error in one does not keep the output of
+// another, and what there is to say about it, from being worked out.
+func TestGenerate_PackagesApart(t *testing.T) {
+	t.Parallel()
+
+	dir := writeModule(t, map[string]string{
+		"broken/broken.go": "package broken\n\ntype E struct{ N int }\n\ntype W struct{ N string }\n\n" +
+			"//kanna:mapper\ntype _ interface{ F(E) W }\n",
+		"fine/fine.go": "package fine\n\ntype E struct{ N int }\n\ntype W struct{ N int64 }\n\n" +
+			"//kanna:mapper\ntype _ interface{ F(E) W }\n",
+	})
+	set, err := packages.Load([]string{"./..."}, packages.Config{Dir: dir, TypesInfo: true})
+	if err != nil || len(set.Diags) > 0 {
+		t.Fatalf("load: %v %v", err, set.Diags)
+	}
+
+	changes, diags := gen.Generate(set)
+	in := make([]string, 0, len(changes))
+	for _, c := range changes {
+		in = append(in, filepath.Base(filepath.Dir(c.Path)))
+	}
+	if want := []string{"fine"}; !slices.Equal(in, want) {
+		t.Errorf("changes in %q, want %q", in, want)
+	}
+	want := "error: F: cannot map broken.E.N (int) to broken.W.N (string)"
+	if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, want) }) {
+		t.Errorf("diagnostics = %q, want one containing %q", diags, want)
 	}
 }

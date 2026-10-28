@@ -233,6 +233,13 @@ func TestConvs_Diagnostics(t *testing.T) {
 				"  strconv.Itoa is listed at test.go:7:2",
 		},
 		{
+			name: "two lists converting alike",
+			src: "import \"strconv\"\n\n//kanna:convert\nvar _ = []any{strconv.Itoa}\n\n" +
+				"//kanna:convert\nvar _ = []any{itoa}\n\nfunc itoa(n int) string { return strconv.Itoa(n) }\n",
+			want: "test.go:9:15: error: strconv.Itoa and itoa both convert int to string\n" +
+				"  strconv.Itoa is listed at test.go:6:15",
+		},
+		{
 			name: "a pair a declared function maps",
 			src: "type E struct{ N int }\n\ntype W struct{ N int }\n\n//kanna:mapper\ntype _ interface{ ToW(E) W }\n\n" +
 				"func toW(e E) W { return W(e) }\n\n//kanna:convert\nvar _ = []any{\n\ttoW,\n}\n",

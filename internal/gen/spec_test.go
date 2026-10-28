@@ -233,3 +233,48 @@ func TestDecls_Diagnostics(t *testing.T) {
 		})
 	}
 }
+
+// A line that only looks like a //kanna:map is warned about and otherwise
+// ignored: the function is still declared, without the entries the line was
+// probably meant to give it.
+func TestDecls_WarnsAboutALineLikeAMapDirective(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, line string
+		want       string   // the diagnostic
+		found      []string // the declarations
+	}{
+		{
+			name: "spaced",
+			line: "// kanna:map Name=-",
+			want: `test.go:9:2: warning: "// kanna:map Name=-" is not recognized as a directive; ` +
+				`write it as "//kanna:map Name=-" with no space`,
+			// Not a directive, the line stays in the doc comment.
+			found: []string{"F(src test.E) test.W\n  doc: kanna:map Name=-"},
+		},
+		{
+			name: "misspelled",
+			line: "//kanna:mapp Name=-",
+			want: "test.go:9:2: warning: \"//kanna:mapp Name=-\" is not recognized as a directive\n" +
+				`  did you mean "//kanna:map Name=-"?`,
+			found: []string{"F(src test.E) test.W"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "package test\n\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\t" + tt.line + "\n\tF(E) W\n}\n"
+			found, diags := gen.Decls(pkgtest.Load(t, map[string]string{"test.go": src}))
+			if !slices.Equal(found, tt.found) {
+				t.Errorf("decls = %q, want %q", found, tt.found)
+			}
+			if !slices.Equal(diags, []string{tt.want}) {
+				t.Errorf("diagnostics = %q, want %q", diags, []string{tt.want})
+			}
+		})
+	}
+}

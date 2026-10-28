@@ -141,7 +141,7 @@ func generate(set packages.Set, targets map[string]bool) ([]output.Change, []str
 		}
 		declared := output.DeclaredNames(dir, outputFile, pkg.Name)
 		plans, pd := planFuncs(pkg.Fset, ds, cs, declared)
-		if diags = append(append(diags, cd...), pd...); diag.HasErrors(diags) {
+		if diags = append(append(diags, cd...), pd...); diag.HasErrors(slices.Concat(dd, cd, pd)) {
 			continue
 		}
 

@@ -141,12 +141,14 @@ func (p *planner) fieldOp(src types.Type, field, dstField *types.Var) (read, op,
 	return read{}, nil, false
 }
 
-// readsOf lists the ways to read field from a src: its getter, when src has
-// one as protoc-gen-go writes them, then the field itself.
+// readsOf lists the ways to read field from a src: its getter, when src
+// declares one as protoc-gen-go writes them, then the field itself. A getter
+// promoted from an embedded struct reads that struct's field, so it does not
+// count.
 func readsOf(src types.Type, field *types.Var) []read {
 	var reads []read
-	obj, _, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
-	if m, ok := obj.(*types.Func); ok {
+	obj, index, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
+	if m, ok := obj.(*types.Func); ok && len(index) == 1 {
 		if sig := m.Signature(); sig.Params().Len() == 0 && sig.Results().Len() == 1 {
 			reads = append(reads, read{name: m.Name(), getter: true, typ: sig.Results().At(0).Type()})
 		}
@@ -238,7 +240,7 @@ func exported(s string) string {
 }
 
 // unexported lowers the capitals s starts with, as Go spells the word they
-// make: Address becomes address, ID id, and URLInfo urlInfo.
+// make: Address becomes address, ID id, URLInfo urlInfo, and IDs ids.
 func unexported(s string) string {
 	r := []rune(s)
 	n := 0
@@ -246,7 +248,12 @@ func unexported(s string) string {
 		n++
 	}
 	if n > 1 && n < len(r) {
-		n-- // the last capital starts the next word
+		// The last capital starts the next word, unless the s of a plural
+		// follows it.
+		plural := r[n] == 's' && (n+1 == len(r) || unicode.IsUpper(r[n+1]))
+		if !plural {
+			n--
+		}
 	}
 	for i := range n {
 		r[i] = unicode.ToLower(r[i])

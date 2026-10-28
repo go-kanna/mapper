@@ -81,6 +81,8 @@ func TestOps(t *testing.T) {
 		{src: "int64", dst: "int32", want: "none"},
 		{src: "int", dst: "int32", want: "none"},
 		{src: "int32", dst: "int", want: "cast:int"},
+		{src: "int", dst: "int64", want: "cast:int64"},
+		{src: "int", dst: "uint", want: "none"},
 		{src: "uint8", dst: "int16", want: "cast:int16"},
 		{src: "uint16", dst: "uint32", want: "cast:uint32"},
 		{src: "uint", dst: "uint64", want: "cast:uint64"},
@@ -95,6 +97,7 @@ func TestOps(t *testing.T) {
 		{src: "float32", dst: "float64", want: "cast:float64"},
 		{src: "float64", dst: "float32", want: "none"},
 		{src: "bool", dst: "string", want: "none"},
+		{src: "int64", dst: "string", want: "none"},
 		{src: "string", dst: "[]byte", want: "cast:[]byte"},
 		{src: "[]byte", dst: "string", want: "cast:string"},
 

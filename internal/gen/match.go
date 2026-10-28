@@ -275,7 +275,8 @@ func (m *matching) source(name, label string, tagged *types.Var, tag string, sou
 // promotedField returns the field named name that src promotes from an
 // embedded struct. A tag on it disqualifies it: the tag says the field is not
 // simply name, and it is reported unmapped instead of copied against it. So
-// does a pointer on the way, which reading through would panic on when nil.
+// does a pointer on the way, which reading through would panic on when nil,
+// and an embedded field tagged map:"-", which takes no part in mapping.
 func (m *matching) promotedField(name string) (*types.Var, bool) {
 	named, _, _ := namedStruct(m.src)
 	obj, index, _ := types.LookupFieldOrMethod(m.src, true, named.Obj().Pkg(), name)
@@ -301,12 +302,12 @@ func (m *matching) promoted(name string) bool {
 
 // embeddedStruct walks the embedded structs path leads through from t to the
 // one declaring the field at the end of it, reporting false when one of them
-// is embedded as a pointer.
+// is embedded as a pointer or tagged map:"-".
 func embeddedStruct(t types.Type, path []int) (*types.Struct, bool) {
 	_, st, _ := namedStruct(t)
 	for _, i := range path {
 		next, ok := st.Field(i).Type().Underlying().(*types.Struct)
-		if !ok {
+		if !ok || reflect.StructTag(st.Tag(i)).Get(tagKey) == "-" {
 			return nil, false
 		}
 		st = next

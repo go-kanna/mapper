@@ -133,4 +133,11 @@ func TestGenerated_Oneof(t *testing.T) {
 	if got.Contact.Email != nil || got.Contact.Postal == nil || got.Contact.Postal.City != "Sapporo" {
 		t.Errorf("Contact = %+v, want the postal address alone", got.Contact)
 	}
+
+	// With both set, the first arm in the oneof's order wins.
+	in.Contact = model.Contact{Email: new("alice@example.com"), Postal: &model.Address{City: "Sapporo"}}
+	w = mapper.EmployeeToWire(in)
+	if _, ok := w.Contact.GetKind().(*wire.Contact_Email); !ok {
+		t.Errorf("Contact.Kind with both fields set = %#v, want the email arm", w.Contact.GetKind())
+	}
 }
