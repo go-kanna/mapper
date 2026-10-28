@@ -20,7 +20,7 @@ type _ interface {
 	EmployeeFromWire(e *wire.Employee) (model.Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	netip.ParseAddr,
 	netip.Addr.String,

@@ -86,7 +86,7 @@ type _ interface {
 	FromWire(w *Wire) (Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	netip.ParseAddr,
 	netip.Addr.String,
@@ -204,7 +204,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 			name: "a fallible conversion in a function declared without an error",
 			src: "type S struct{ N string }\ntype D struct{ N int }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
-				"//kanna:convert\nvar _ = []any{strconv.Atoi}\n",
+				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:12:2: error: F has to return an error: N is converted by strconv.Atoi, which can fail\n" +
 				"  declare it as F(test.S) (test.D, error)",
 		},
@@ -212,21 +212,21 @@ func TestPlans_Diagnostics(t *testing.T) {
 			name: "a fallible conversion of each element",
 			src: "type S struct{ Ns []string }\ntype D struct{ Ns []int }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
-				"//kanna:convert\nvar _ = []any{strconv.Atoi}\n",
+				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:12:2: error: F has to return an error: Ns is converted by strconv.Atoi, which can fail",
 		},
 		{
 			name: "a fallible conversion behind a pointer",
 			src: "type S struct{ N *string }\ntype D struct{ N *int }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
-				"//kanna:convert\nvar _ = []any{strconv.Atoi}\n",
+				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:12:2: error: F has to return an error: N is converted by strconv.Atoi, which can fail",
 		},
 		{
 			name: "a written function that can fail",
 			src: "type S struct{ In In }\ntype In struct{ N string }\ntype D struct{ In Out }\ntype Out struct{ N int }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
-				"//kanna:convert\nvar _ = []any{strconv.Atoi}\n",
+				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:14:2: error: F has to return an error: In is mapped by inToOut, which can fail\n" +
 				"  declare it as F(test.S) (test.D, error)",
 		},
@@ -235,7 +235,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 			src: "type Status int32\ntype Code int32\ntype S struct{ Status Status }\ntype D struct{ Status Code }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:14:2: error: F: cannot map test.S.Status (test.Status) to test.D.Status (test.Code)\n" +
-				"  add a func(test.Status) test.Code to a //kanna:convert list",
+				"  add a func(test.Status) test.Code to a //kanna:converter list",
 		},
 		{
 			name: "a function of the package left out of the lists",
@@ -243,13 +243,13 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
 				"func statusToCode(s Status) Code { return Code(s) }\n",
 			want: "test.go:14:2: error: F: cannot map test.S.Status (test.Status) to test.D.Status (test.Code)\n" +
-				"  statusToCode converts it; add it to a //kanna:convert list",
+				"  statusToCode converts it; add it to a //kanna:converter list",
 		},
 		{
 			name: "an interface",
 			src:  "type S struct{ V any }\ntype D struct{ V string }\n\n//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:12:2: error: F: cannot map test.S.V (any) to test.D.V (string)\n" +
-				"  add a func(any) string to a //kanna:convert list\n" +
+				"  add a func(any) string to a //kanna:converter list\n" +
 				"  an interface field is mapped only as a protobuf oneof, whose arms are single-field structs implementing it",
 		},
 		{

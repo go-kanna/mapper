@@ -57,7 +57,7 @@ type ConvsRead struct {
 	Diags []string
 }
 
-// Convs reads the //kanna:convert lists of pkg, which declares functions as
+// Convs reads the //kanna:converter lists of pkg, which declares functions as
 // Decls finds them, following the lists they name into loaded.
 func Convs(pkg *packages.Package, loaded []*packages.Package) ConvsRead {
 	ds, _ := decls(pkg)

@@ -12,7 +12,7 @@ import (
 // a UUID is a string on the wire, and a time a well-known Timestamp. The
 // functions and methods are listed as they are, with no wrappers.
 //
-//kanna:convert
+//kanna:converter
 var Defaults = []any{
 	uuid.UUID.String,
 	uuid.Parse,

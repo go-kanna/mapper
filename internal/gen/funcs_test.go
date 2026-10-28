@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	netip.ParseAddr,
 	netip.Addr.String,
@@ -34,7 +34,7 @@ var _ = []any{
 
 // A list of the package applies whether another names it or not.
 //
-//kanna:convert
+//kanna:converter
 var common = []any{
 	strconv.Atoi,
 }
@@ -157,92 +157,92 @@ func TestConvs_Diagnostics(t *testing.T) {
 	}{
 		{
 			name: "not a list",
-			src:  "//kanna:convert\nvar list = []string{\"a\"}\n",
-			want: "test.go:4:5: error: //kanna:convert marks a list: var list = []any{...}",
+			src:  "//kanna:converter\nvar list = []string{\"a\"}\n",
+			want: "test.go:4:5: error: //kanna:converter marks a list: var list = []any{...}",
 		},
 		{
 			name: "no value",
-			src:  "//kanna:convert\nvar list []any\n",
-			want: "test.go:4:5: error: //kanna:convert marks a list: var list = []any{...}",
+			src:  "//kanna:converter\nvar list []any\n",
+			want: "test.go:4:5: error: //kanna:converter marks a list: var list = []any{...}",
 		},
 		{
 			name: "arguments",
-			src:  "//kanna:convert strict\nvar _ = []any{}\n",
-			want: `test.go:3:1: error: //kanna:convert takes no arguments, got "strict"`,
+			src:  "//kanna:converter strict\nvar _ = []any{}\n",
+			want: `test.go:3:1: error: //kanna:converter takes no arguments, got "strict"`,
 		},
 		{
 			name: "misspelled",
-			src:  "//kanna:convrt\nvar _ = []any{}\n",
-			want: `did you mean "//kanna:convert"?`,
+			src:  "//kanna:convertr\nvar _ = []any{}\n",
+			want: `did you mean "//kanna:converter"?`,
 		},
 		{
 			name: "a function literal",
-			src:  "//kanna:convert\nvar _ = []any{\n\tfunc(s string) int { return len(s) },\n}\n",
+			src:  "//kanna:converter\nvar _ = []any{\n\tfunc(s string) int { return len(s) },\n}\n",
 			want: "test.go:5:2: error: a function literal cannot be listed; give it a name",
 		},
 		{
 			name: "a method value",
-			src:  "import \"net/netip\"\n\nvar addr netip.Addr\n\n//kanna:convert\nvar _ = []any{\n\taddr.String,\n}\n",
+			src:  "import \"net/netip\"\n\nvar addr netip.Addr\n\n//kanna:converter\nvar _ = []any{\n\taddr.String,\n}\n",
 			want: "test.go:9:2: error: addr.String is a method value; list the method expression netip.Addr.String instead",
 		},
 		{
 			name: "a generic function",
-			src:  "func same[T any](v T) T { return v }\n\n//kanna:convert\nvar _ = []any{\n\tsame[int],\n}\n",
+			src:  "func same[T any](v T) T { return v }\n\n//kanna:converter\nvar _ = []any{\n\tsame[int],\n}\n",
 			want: "test.go:7:2: error: same[int] is generic, which is not supported",
 		},
 		{
 			name: "not a function",
-			src:  "var limit = 3\n\n//kanna:convert\nvar _ = []any{\n\tlimit,\n}\n",
-			want: "test.go:7:2: error: limit is not a function, a method expression, or a //kanna:convert list",
+			src:  "var limit = 3\n\n//kanna:converter\nvar _ = []any{\n\tlimit,\n}\n",
+			want: "test.go:7:2: error: limit is not a function, a method expression, or a //kanna:converter list",
 		},
 		{
 			name: "a constant",
-			src:  "const limit = 3\n\n//kanna:convert\nvar _ = []any{\n\tlimit,\n}\n",
-			want: "test.go:7:2: error: limit is not a function, a method expression, or a //kanna:convert list",
+			src:  "const limit = 3\n\n//kanna:converter\nvar _ = []any{\n\tlimit,\n}\n",
+			want: "test.go:7:2: error: limit is not a function, a method expression, or a //kanna:converter list",
 		},
 		{
 			name: "a field",
-			src:  "var cfg struct{ Parse func(string) int }\n\n//kanna:convert\nvar _ = []any{\n\tcfg.Parse,\n}\n",
-			want: "test.go:7:2: error: cfg.Parse is not a function, a method expression, or a //kanna:convert list",
+			src:  "var cfg struct{ Parse func(string) int }\n\n//kanna:converter\nvar _ = []any{\n\tcfg.Parse,\n}\n",
+			want: "test.go:7:2: error: cfg.Parse is not a function, a method expression, or a //kanna:converter list",
 		},
 		{
 			name: "a call",
-			src:  "import \"strconv\"\n\n//kanna:convert\nvar _ = []any{\n\tstrconv.Itoa(1),\n}\n",
-			want: "test.go:7:2: error: strconv.Itoa(1) is not a function, a method expression, or a //kanna:convert list",
+			src:  "import \"strconv\"\n\n//kanna:converter\nvar _ = []any{\n\tstrconv.Itoa(1),\n}\n",
+			want: "test.go:7:2: error: strconv.Itoa(1) is not a function, a method expression, or a //kanna:converter list",
 		},
 		{
 			name: "a list without the directive",
-			src:  "var plain = []any{}\n\n//kanna:convert\nvar _ = []any{\n\tplain,\n}\n",
-			want: "test.go:7:2: error: plain is not a //kanna:convert list",
+			src:  "var plain = []any{}\n\n//kanna:converter\nvar _ = []any{\n\tplain,\n}\n",
+			want: "test.go:7:2: error: plain is not a //kanna:converter list",
 		},
 		{
 			name: "not a conversion",
-			src:  "import \"strconv\"\n\n//kanna:convert\nvar _ = []any{\n\tstrconv.FormatInt,\n}\n",
+			src:  "import \"strconv\"\n\n//kanna:converter\nvar _ = []any{\n\tstrconv.FormatInt,\n}\n",
 			want: "test.go:7:2: error: strconv.FormatInt cannot convert: it is not func(A) B or func(A) (B, error)",
 		},
 		{
 			name: "a second result that is not an error",
-			src:  "import \"unicode/utf8\"\n\n//kanna:convert\nvar _ = []any{\n\tutf8.DecodeRuneInString,\n}\n",
+			src:  "import \"unicode/utf8\"\n\n//kanna:converter\nvar _ = []any{\n\tutf8.DecodeRuneInString,\n}\n",
 			want: "test.go:7:2: error: utf8.DecodeRuneInString cannot convert: it is not func(A) B or func(A) (B, error)",
 		},
 		{
 			name: "two conversions equally near",
-			src: "import \"strconv\"\n\n//kanna:convert\nvar _ = []any{\n\tstrconv.Itoa,\n\titoa,\n}\n\n" +
+			src: "import \"strconv\"\n\n//kanna:converter\nvar _ = []any{\n\tstrconv.Itoa,\n\titoa,\n}\n\n" +
 				"func itoa(n int) string { return strconv.Itoa(n) }\n",
 			want: "test.go:8:2: error: strconv.Itoa and itoa both convert int to string\n" +
 				"  strconv.Itoa is listed at test.go:7:2",
 		},
 		{
 			name: "two lists converting alike",
-			src: "import \"strconv\"\n\n//kanna:convert\nvar _ = []any{strconv.Itoa}\n\n" +
-				"//kanna:convert\nvar _ = []any{itoa}\n\nfunc itoa(n int) string { return strconv.Itoa(n) }\n",
+			src: "import \"strconv\"\n\n//kanna:converter\nvar _ = []any{strconv.Itoa}\n\n" +
+				"//kanna:converter\nvar _ = []any{itoa}\n\nfunc itoa(n int) string { return strconv.Itoa(n) }\n",
 			want: "test.go:9:15: error: strconv.Itoa and itoa both convert int to string\n" +
 				"  strconv.Itoa is listed at test.go:6:15",
 		},
 		{
 			name: "a pair a declared function maps",
 			src: "type E struct{ N int }\n\ntype W struct{ N int }\n\n//kanna:mapper\ntype _ interface{ ToW(E) W }\n\n" +
-				"func toW(e E) W { return W(e) }\n\n//kanna:convert\nvar _ = []any{\n\ttoW,\n}\n",
+				"func toW(e E) W { return W(e) }\n\n//kanna:converter\nvar _ = []any{\n\ttoW,\n}\n",
 			want: "test.go:14:2: error: toW converts test.E to test.W, which ToW is declared to do",
 		},
 	}

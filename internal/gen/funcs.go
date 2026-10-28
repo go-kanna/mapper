@@ -14,11 +14,11 @@ import (
 	"github.com/go-kanna/internal/packages"
 )
 
-// convertKey spells the directive //kanna:convert, which marks a list of the
-// functions that convert what Go cannot.
-const convertKey = "convert"
+// converterKey spells the directive //kanna:converter, which marks a list of
+// the functions that convert what Go cannot.
+const converterKey = "converter"
 
-// conv is a function a //kanna:convert list names, which converts src to dst.
+// conv is a function a //kanna:converter list names, which converts src to dst.
 type conv struct {
 	fn *types.Func
 
@@ -74,7 +74,7 @@ func (cs convs) unlistedFor(src, dst types.Type) (conv, bool) {
 // anySlice is []any, the type of a list.
 var anySlice = types.NewSlice(types.Universe.Lookup("any").Type())
 
-// list is a variable marked //kanna:convert.
+// list is a variable marked //kanna:converter.
 type list struct {
 	obj   *types.Var
 	pkg   *packages.Package
@@ -100,7 +100,7 @@ type queued struct {
 	depth int
 }
 
-// convsOf reads the //kanna:convert lists of target, which declares ds, and
+// convsOf reads the //kanna:converter lists of target, which declares ds, and
 // follows the lists they name into loaded, which has to hold their packages
 // with syntax and type information, from the same load as target. A package it
 // needs but does not find is returned in missing, for the caller to load and
@@ -134,8 +134,8 @@ func convsOf(target *packages.Package, loaded map[string]*packages.Package, ds [
 	return convs{byPair: byPair, unlisted: r.unlisted()}, slices.Compact(r.missing), r.diags
 }
 
-// listsOf returns the variables pkg marks //kanna:convert, in source order, and
-// the warnings about the ones it seems to have meant to mark, such as a
+// listsOf returns the variables pkg marks //kanna:converter, in source order,
+// and the warnings about the ones it seems to have meant to mark, such as a
 // misspelled directive.
 func (r *listReader) listsOf(pkg *packages.Package) ([]list, []diag.Diag) {
 	if ls, ok := r.lists[pkg.PkgPath]; ok {
@@ -160,7 +160,7 @@ func (r *listReader) listsOf(pkg *packages.Package) ([]list, []diag.Diag) {
 				if doc == nil && len(gd.Specs) == 1 {
 					doc = gd.Doc
 				}
-				d, ds := directive.Find(pkg.Fset, doc, convertKey)
+				d, ds := directive.Find(pkg.Fset, doc, converterKey)
 				if !d.Found {
 					unmarked = append(unmarked, ds...)
 					continue
@@ -173,13 +173,13 @@ func (r *listReader) listsOf(pkg *packages.Package) ([]list, []diag.Diag) {
 	return ls, unmarked
 }
 
-// listOf reads vs, which d marks //kanna:convert; diags are what directive.Find
-// said about it.
+// listOf reads vs, which d marks //kanna:converter; diags are what
+// directive.Find said about it.
 func listOf(pkg *packages.Package, vs *ast.ValueSpec, d directive.Directive, diags []diag.Diag) list {
 	obj, _ := pkg.TypesInfo.Defs[vs.Names[0]].(*types.Var)
 	l := list{obj: obj, pkg: pkg, diags: diags}
 	if d.Args != "" {
-		l.diags = append(l.diags, diag.Errorf(d.Pos, "//kanna:%s takes no arguments, got %q", convertKey, d.Args))
+		l.diags = append(l.diags, diag.Errorf(d.Pos, "//kanna:%s takes no arguments, got %q", converterKey, d.Args))
 	}
 
 	var lit *ast.CompositeLit
@@ -188,7 +188,7 @@ func listOf(pkg *packages.Package, vs *ast.ValueSpec, d directive.Directive, dia
 	}
 	if lit == nil || !types.Identical(pkg.TypesInfo.TypeOf(lit), anySlice) {
 		l.diags = append(l.diags, diag.Errorf(pkg.Fset.Position(vs.Names[0].Pos()),
-			"//kanna:%s marks a list: var %s = []any{...}", convertKey, vs.Names[0].Name))
+			"//kanna:%s marks a list: var %s = []any{...}", converterKey, vs.Names[0].Name))
 	}
 	if !diag.HasErrors(l.diags) {
 		l.elts = lit.Elts
@@ -246,7 +246,7 @@ func (r *listReader) named(q queued, e ast.Expr, obj types.Object) {
 
 func (r *listReader) notAFunction(pos token.Position, e ast.Expr) {
 	r.diags = append(r.diags, diag.Errorf(pos,
-		"%s is not a function, a method expression, or a //kanna:%s list", types.ExprString(e), convertKey))
+		"%s is not a function, a method expression, or a //kanna:%s list", types.ExprString(e), converterKey))
 }
 
 // include queues the list obj, which e names in the list q holds.
@@ -267,7 +267,7 @@ func (r *listReader) include(q queued, e ast.Expr, obj *types.Var) {
 	i := slices.IndexFunc(ls, func(l list) bool { return l.obj == obj })
 	if i < 0 {
 		r.diags = append(r.diags, diag.Errorf(q.l.pkg.Fset.Position(e.Pos()),
-			"%s is not a //kanna:%s list", types.ExprString(e), convertKey))
+			"%s is not a //kanna:%s list", types.ExprString(e), converterKey))
 		return
 	}
 	l := ls[i]

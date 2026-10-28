@@ -35,7 +35,7 @@ type op interface {
 // opDirect assigns the value as it is.
 type opDirect struct{}
 
-// opConv calls a function a //kanna:convert list names.
+// opConv calls a function a //kanna:converter list names.
 type opConv struct{ c conv }
 
 // opCall calls a function of the generated file.

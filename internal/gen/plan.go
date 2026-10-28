@@ -169,9 +169,9 @@ func nilable(t types.Type) bool {
 func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, dstT types.Type) diag.Diag {
 	d := diag.Errorf(at.pos, "%s: cannot map %s (%s) to %s (%s)", at.path, src, typeLabel(srcT), dst, typeLabel(dstT))
 
-	hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), convertKey)
+	hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), converterKey)
 	if c, ok := p.conv.convs.unlistedFor(srcT, dstT); ok {
-		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, convertKey)
+		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
 	}
 	d = d.WithHints(hint)
 	if isInterface(srcT) || isInterface(dstT) {

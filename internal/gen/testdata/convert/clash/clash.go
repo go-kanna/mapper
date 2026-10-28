@@ -3,7 +3,7 @@ package clash
 
 import "github.com/go-kanna/mapper/internal/gen/testdata/convert/shared"
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	shared.Defaults,
 	shared.Other,

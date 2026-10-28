@@ -111,7 +111,7 @@ type _ interface {
 	FromPB(*EmployeePB) (Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{
 	netip.ParseAddr,
 	netip.Addr.String,
@@ -160,7 +160,7 @@ import "net/netip"
 
 // Defaults is what every package of the app converts alike.
 //
-//kanna:convert
+//kanna:converter
 var Defaults = []any{
 	netip.ParseAddr,
 	netip.Addr.String,
@@ -176,7 +176,7 @@ type _ interface {
 	FromPB(*EmployeePB) (Employee, error)
 }
 
-//kanna:convert
+//kanna:converter
 var _ = []any{convert.Defaults}
 `,
 	})
@@ -221,7 +221,7 @@ func TestCommand_KeepsOutputOnADirectiveWarning(t *testing.T) {
 	t.Parallel()
 
 	const src = "package app\n\nimport \"net/netip\"\n\n//kanna:mapper\ntype _ interface {\n" +
-		"\tToPB(Employee) *EmployeePB\n}\n\n//kanna:convert\nvar _ = []any{netip.Addr.String}\n"
+		"\tToPB(Employee) *EmployeePB\n}\n\n//kanna:converter\nvar _ = []any{netip.Addr.String}\n"
 
 	tests := []struct{ name, line string }{
 		{name: "spaced", line: "// kanna:map Id=-"},
@@ -266,7 +266,7 @@ type _ interface {
 
 	code, _, stderr := run(t, dir)
 	want := "./mapper.go:5:2: error: ToPB: cannot map app.Employee.ID (netip.Addr) to app.EmployeePB.Id (string)\n" +
-		"  add a func(netip.Addr) string to a //kanna:convert list\n"
+		"  add a func(netip.Addr) string to a //kanna:converter list\n"
 	if code != cli.ExitFailure || stderr != want {
 		t.Errorf("run = %d, stderr\n%s\nwant\n%s", code, stderr, want)
 	}
