@@ -239,8 +239,8 @@ A struct mapped to several types may carry a tag naming a field only some of the
 destination's fields is no error by itself. When a destination field has no source and a source field's tag nearly names
 it, the error points the tag out.
 
-Where a source has a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil message
-reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself when the
+Where a source declares a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil
+message reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself when the
 destination can hold the nil.
 
 ### Fields you cannot tag

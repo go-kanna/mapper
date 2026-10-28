@@ -117,6 +117,36 @@ func addressToAddressPB() {}
 	}
 }
 
+// A getter promoted from an embedded struct reads that struct's field, so the
+// field of the same name beside it is read as it is.
+func TestPlans_PromotedGetter(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Base struct{ ID string }
+
+func (b *Base) GetID() string { return b.ID }
+
+type S struct {
+	Base
+	ID string
+}
+
+type D struct{ ID string }
+
+//kanna:mapper
+type _ interface{ F(S) D }
+`}))
+
+	if want := []string{"F(src test.S) test.D\n  ID = .ID direct"}; !slices.Equal(found, want) {
+		t.Errorf("plans = %q, want %q", found, want)
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
 func TestPlans_Diagnostics(t *testing.T) {
 	t.Parallel()
 

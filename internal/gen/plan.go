@@ -141,12 +141,14 @@ func (p *planner) fieldOp(src types.Type, field, dstField *types.Var) (read, op,
 	return read{}, nil, false
 }
 
-// readsOf lists the ways to read field from a src: its getter, when src has
-// one as protoc-gen-go writes them, then the field itself.
+// readsOf lists the ways to read field from a src: its getter, when src
+// declares one as protoc-gen-go writes them, then the field itself. A getter
+// promoted from an embedded struct reads that struct's field, so it does not
+// count.
 func readsOf(src types.Type, field *types.Var) []read {
 	var reads []read
-	obj, _, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
-	if m, ok := obj.(*types.Func); ok {
+	obj, index, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
+	if m, ok := obj.(*types.Func); ok && len(index) == 1 {
 		if sig := m.Signature(); sig.Params().Len() == 0 && sig.Results().Len() == 1 {
 			reads = append(reads, read{name: m.Name(), getter: true, typ: sig.Results().At(0).Type()})
 		}
