@@ -240,7 +240,7 @@ func exported(s string) string {
 }
 
 // unexported lowers the capitals s starts with, as Go spells the word they
-// make: Address becomes address, ID id, and URLInfo urlInfo.
+// make: Address becomes address, ID id, URLInfo urlInfo, and IDs ids.
 func unexported(s string) string {
 	r := []rune(s)
 	n := 0
@@ -248,7 +248,12 @@ func unexported(s string) string {
 		n++
 	}
 	if n > 1 && n < len(r) {
-		n-- // the last capital starts the next word
+		// The last capital starts the next word, unless the s of a plural
+		// follows it.
+		plural := r[n] == 's' && (n+1 == len(r) || unicode.IsUpper(r[n+1]))
+		if !plural {
+			n--
+		}
 	}
 	for i := range n {
 		r[i] = unicode.ToLower(r[i])

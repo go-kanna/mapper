@@ -161,6 +161,37 @@ type _ interface{ F(S) D }
 	}
 }
 
+// A function written for a pair is named after its types, a plural initialism
+// lowered whole: idsToIDsPB, not iDsToIDsPB.
+func TestPlans_PluralInitialismInAName(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type IDs struct{ N int }
+
+type IDsPB struct{ N int }
+
+type S struct{ IDs IDs }
+
+type D struct{ IDs *IDsPB }
+
+//kanna:mapper
+type _ interface{ F(S) D }
+`}))
+
+	want := []string{
+		"F(src test.S) test.D\n  IDs = .IDs call:idsToIDsPB",
+		"idsToIDsPB(src test.IDs) *test.IDsPB\n  N = .N direct",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans = %q, want %q", found, want)
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
 func TestPlans_Diagnostics(t *testing.T) {
 	t.Parallel()
 
@@ -258,6 +289,9 @@ func TestUnexported(t *testing.T) {
 		"Address":   "address",
 		"ID":        "id",
 		"URLInfo":   "urlInfo",
+		"IDs":       "ids",
+		"URLs":      "urls",
+		"IDsOf":     "idsOf",
 		"X":         "x",
 		"lowerCase": "lowerCase",
 	} {
