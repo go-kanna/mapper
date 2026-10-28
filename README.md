@@ -18,8 +18,8 @@ Part of the [kanna](https://github.com/go-kanna/kanna) family of code generators
 go get -tool github.com/go-kanna/mapper/cmd/kanna-mapper
 ```
 
-There is no runtime to import: the generated code calls your types, the functions you list, and fmt, along with
-`validated.New` where your types hold [validated values](#validated-values).
+There is no runtime to import: the generated code calls your types, the functions you list, and fmt, along with the
+constructors of your [value types](#value-types).
 
 ## Use
 
@@ -276,8 +276,8 @@ Each field takes the first case that applies.
 | a declared function or a listed conversion for the pair       | that function is called                              |
 | the source is a pointer                                       | dereferenced; nil leaves the destination zero        |
 | the destination is a pointer                                  | the address of the converted value                   |
-| the source is a `validated.Value`                             | what `Get` returns, converted                        |
-| the destination is a `validated.Value`                        | `validated.New` of the converted value               |
+| the source is a value type of kanna-value                     | what its accessor returns, converted                 |
+| the destination is a value type of kanna-value                | its constructor called with the converted value      |
 | both are slices                                               | converted element by element; nil stays nil          |
 | both are maps with the same key type                          | converted value by value; nil stays nil              |
 | a lossless Go conversion                                      | `dst(v)`, unless both types are declared with `type` |
@@ -298,20 +298,19 @@ the Unix epoch. List a function of your own to decide otherwise.
 
 The error of a conversion that fails names the destination field it was for: `map model.Employee.ID: invalid uuid`.
 
-## Validated values
+## Value types
 
-A [`validated.Value`](https://github.com/go-kanna/validated), or an alias of one such as `validated.String[rules.Email]`,
-is read with `Get` and made with `validated.New`, so that a value arriving from the wire or a database row goes through
-its rule like any other. What it holds is converted by the rules above. With `timestamppb.New` and
-`(*timestamppb.Timestamp).AsTime` listed, a `*model.CompletedAt`, declared as
-`validated.Value[time.Time, CompletedAtRule]`, maps to and from a `*timestamppb.Timestamp`:
+A value type that [kanna-value](https://github.com/go-kanna/value) generates is read with its accessor and made with its
+constructor, so that a value arriving from the wire or a database row goes through its rule like any other. What it
+holds is converted by the rules above. With `timestamppb.New` and `(*timestamppb.Timestamp).AsTime` listed, a
+`*model.CompletedAt`, holding a `time.Time`, maps to and from a `*timestamppb.Timestamp`:
 
 ```go
 // TodoToProto maps model.Todo to *todov1.Todo.
 func TodoToProto(src model.Todo) *todov1.Todo {
 	var v *timestamppb.Timestamp
 	if v2 := src.CompletedAt; v2 != nil {
-		v = timestamppb.New((*v2).Get())
+		v = timestamppb.New((*v2).Time())
 	}
 	return &todov1.Todo{
 		CompletedAt: v,
@@ -325,7 +324,7 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 	}
 	var v *model.CompletedAt
 	if v2 := src.GetCompletedAt(); v2 != nil {
-		v3, err := validated.New[model.CompletedAtRule](v2.AsTime())
+		v3, err := model.NewCompletedAt(v2.AsTime())
 		if err != nil {
 			return model.Todo{}, fmt.Errorf("map model.Todo.CompletedAt: %w", err)
 		}
@@ -338,14 +337,17 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 ```
 
 A rule can reject the value, so a function making one has to return an error, and the rule's error is wrapped as any
-other is. A zero on the source side is checked like any other value rather than taken for the zero `Value`, which stands
-for one never given: map an optional field to a pointer, which stays nil. A value whose type stays the same is copied,
-not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
+other is. A zero on the source side is checked like any other value rather than taken for the zero value type, which
+stands for one never given: map an optional field to a pointer, which stays nil. A value whose type stays the same is
+copied, not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
 
-A function listed for the pair is called instead, as for any other type. A rule that another package declares unexported
-cannot be named in `validated.New`, so the field is reported as one that cannot be mapped: list a function of that
-package that makes the value. The type is recognized by its package path and name; kanna-mapper does not depend on
-validated, and the generated code imports it only to make a value your types hold.
+A value type is known by the shape kanna-value gives it, not by reading its `//kanna:value`, as kanna-mapper may see
+only the types of the package declaring it: a struct with one unexported field, a method named after the field's type
+returning it (`Time` for a `time.Time`, `String` for a `string`), and `NewX(T) (X, error)` beside it. A function listed
+for the pair is called instead, as for any other type. An unexported value type of another package cannot be made
+here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. So is a value type
+whose package this one sees only through another, whose export data carries the type without its constructor; list
+the constructor, such as `deep.NewLevel`, which brings the package in.
 
 ## Protobuf oneofs
 
