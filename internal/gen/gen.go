@@ -87,12 +87,9 @@ func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Dia
 	}
 }
 
-// stopped returns what a run that cannot generate reports: its own errors,
-// and the type errors it deferred, as one may be the cause, but for those that
-// say only that a function it writes is missing. One in a //kanna:converter
-// list stays, as a list cannot name such a function either. What does not
-// type-check is left out of its own errors, as the type error behind it says
-// more; should that leave no error, all are reported.
+// stopped returns what a run that cannot generate reports, leaving out the
+// type errors that say only that a function it writes is missing. One in a
+// //kanna:converter list stays, as a list cannot name such a function either.
 func stopped(set packages.Set, targets map[string]bool, deferred, ds []diag.Diag) []diag.Diag {
 	written := make(map[string]bool)
 	for _, pkg := range set.Packages {
@@ -104,14 +101,7 @@ func stopped(set packages.Set, targets map[string]bool, deferred, ds []diag.Diag
 		}
 	}
 	pending, listed := set.Pending(written), inLists(set)
-	reported := slices.Concat(
-		slices.DeleteFunc(slices.Clone(deferred), func(d diag.Diag) bool { return pending(d) && !listed(d) }),
-		slices.DeleteFunc(slices.Clone(ds), func(d diag.Diag) bool { return d.Message == notTypeChecked }),
-	)
-	if !diag.HasErrors(reported) {
-		return slices.Concat(deferred, ds)
-	}
-	return reported
+	return packages.Stopped(deferred, ds, func(d diag.Diag) bool { return pending(d) && !listed(d) })
 }
 
 // noTarget warns that a run found nothing to generate: a go:generate line left
