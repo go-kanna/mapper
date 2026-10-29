@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kanna/internal/diag"
 	"github.com/go-kanna/internal/packages"
+	"github.com/go-kanna/internal/valuetype"
 )
 
 // plan is the body of one function: how each field of its destination is
@@ -175,18 +176,19 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
 	}
 	d = d.WithHints(hint)
-	if v, ok := valueTypeOf(derefType(dstT)); ok && !v.callable(p.conv.pkg) {
-		obj := v.named.Obj()
-		ctor := obj.Pkg().Name() + "." + constructorName(obj)
+	if v, ok := valuetype.Of(derefType(dstT)); ok && !callable(v, p.conv.pkg) {
+		obj := v.Named.Obj()
+		newFunc, _ := valuetype.Constructors(obj.Name())
+		ctor := obj.Pkg().Name() + "." + newFunc
 		switch {
 		case !obj.Exported() && obj.Pkg() != p.conv.pkg:
 			d = d.WithHints(fmt.Sprintf("its constructor, %s, cannot be called here: it is not exported", ctor))
-		case obj.Pkg().Scope().Lookup(constructorName(obj)) == nil:
+		case obj.Pkg().Scope().Lookup(newFunc) == nil:
 			// Its package is seen only through another, whose export data
 			// carries the type but not the functions beside it.
 			d = d.WithHints(fmt.Sprintf("a value type of kanna-value is made by %s(%s) (%s, error), "+
 				"which this package does not see; list it in a //kanna:%s list",
-				ctor, typeLabel(v.held), typeLabel(v.named), converterKey))
+				ctor, typeLabel(v.Held), typeLabel(v.Named), converterKey))
 		}
 	}
 	if isInterface(srcT) || isInterface(dstT) {
