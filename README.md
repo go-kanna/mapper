@@ -408,7 +408,8 @@ run that succeeds prints nothing; one that finds no `//kanna:mapper` interface a
 import path. A package whose interfaces have all lost `//kanna:mapper` has its `mapper_gen.go` removed, unless code in
 the packages the run loads still calls its functions; a file of that name without the generated-code header is never
 touched. The `go generate` that removes it ends with `open ...: no such file or directory`, from go generate itself,
-which lists a package's files before it runs the generators; the file is gone as it should be.
+which lists a package's files before it runs the generators; the file is gone as it should be
+([golang/go#36068](https://github.com/golang/go/issues/36068)).
 
 ## Example
 
