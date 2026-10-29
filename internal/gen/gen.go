@@ -40,9 +40,9 @@ func Command() cli.Command[config] {
 
 func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Diag) {
 	pc := packages.Config{Dir: dir, Tags: cfg.tags, TypesInfo: true, Regenerated: []string{outputFile}}
-	set, diags, ok := load(patterns, pc)
-	if !ok {
-		return nil, diags
+	set, err := packages.Load(patterns, pc)
+	if err != nil {
+		return nil, []diag.Diag{diag.Errorf(token.Position{}, "%v", err)}
 	}
 	targets := make(map[string]bool, len(set.Packages))
 	for _, pkg := range set.Packages {
@@ -54,39 +54,64 @@ func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Dia
 	// alongside the others: the types of two loads are never identical.
 	var extra []string
 	for {
+		// Code calling a function the run writes does not compile before it
+		// has run, nor does code calling it as the run is about to change it.
+		// So a type error of a package loaded does not stop the run here:
+		// packages.Recheck tells, once the output is in place, whether it
+		// remains.
+		blocking, deferred := set.Split()
+		if diag.HasErrors(blocking) {
+			return nil, append(blocking, set.SetAsideWarnings()...)
+		}
 		changes, missing, ds := generate(set, targets)
 		if len(missing) == 0 {
-			return changes, append(diags, noTarget(set, targets, changes, ds, patterns)...)
+			if diag.HasErrors(ds) {
+				return nil, stopped(set, targets, deferred, ds)
+			}
+			if rds := packages.Recheck(set, changes); len(rds) > 0 {
+				return nil, slices.Concat(ds, rds, set.SetAsideWarnings())
+			}
+			return changes, noTarget(set, targets, changes, ds, patterns)
 		}
 		if slices.ContainsFunc(missing, func(p string) bool { return slices.Contains(extra, p) }) {
-			return nil, append(diags, diag.Errorf(token.Position{}, "cannot read the lists of %s",
-				strings.Join(missing, ", ")))
+			return nil, []diag.Diag{diag.Errorf(token.Position{}, "cannot read the lists of %s",
+				strings.Join(missing, ", "))}
 		}
 		extra = append(extra, missing...)
 		if len(patterns) == 0 {
 			patterns = []string{"."}
 		}
-		if set, diags, ok = load(append(slices.Clone(patterns), extra...), pc); !ok {
-			return nil, diags
+		if set, err = packages.Load(append(slices.Clone(patterns), extra...), pc); err != nil {
+			return nil, []diag.Diag{diag.Errorf(token.Position{}, "%v", err)}
 		}
 	}
 }
 
-// load loads patterns, reporting false when what it loaded has errors. The
-// regenerated files it had to set aside are pointed out then.
-func load(patterns []string, pc packages.Config) (packages.Set, []diag.Diag, bool) {
-	set, err := packages.Load(patterns, pc)
-	if err != nil {
-		return set, []diag.Diag{diag.Errorf(token.Position{}, "%v", err)}, false
+// stopped returns what a run that cannot generate reports: its own errors,
+// and the type errors it deferred, as one may be the cause, but for those that
+// say only that a function it writes is missing. One in a //kanna:converter
+// list stays, as a list cannot name such a function either. What does not
+// type-check is left out of its own errors, as the type error behind it says
+// more; should that leave no error, all are reported.
+func stopped(set packages.Set, targets map[string]bool, deferred, ds []diag.Diag) []diag.Diag {
+	written := make(map[string]bool)
+	for _, pkg := range set.Packages {
+		if targets[pkg.PkgPath] {
+			decls, _ := decls(pkg)
+			for _, d := range decls {
+				written[pkg.PkgPath+"."+d.name] = true
+			}
+		}
 	}
-	if !diag.HasErrors(set.Diags) {
-		return set, set.Diags, true
+	pending, listed := set.Pending(written), inLists(set)
+	reported := slices.Concat(
+		slices.DeleteFunc(slices.Clone(deferred), func(d diag.Diag) bool { return pending(d) && !listed(d) }),
+		slices.DeleteFunc(slices.Clone(ds), func(d diag.Diag) bool { return d.Message == notTypeChecked }),
+	)
+	if !diag.HasErrors(reported) {
+		return slices.Concat(deferred, ds)
 	}
-	for _, path := range set.SetAside {
-		set.Diags = append(set.Diags, diag.Warningf(token.Position{Filename: path},
-			"set aside because it no longer compiles; it is regenerated once the errors above are fixed"))
-	}
-	return set, set.Diags, false
+	return reported
 }
 
 // noTarget warns that a run found nothing to generate: a go:generate line left

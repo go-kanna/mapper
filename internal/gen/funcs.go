@@ -173,6 +173,32 @@ func (r *listReader) listsOf(pkg *packages.Package) ([]list, []diag.Diag) {
 	return ls, unmarked
 }
 
+// inLists returns whether a diagnostic points into an element of a
+// //kanna:converter list of a package of set.
+func inLists(set packages.Set) func(diag.Diag) bool {
+	type span struct{ from, to token.Position }
+	var spans []span
+	r := &listReader{lists: make(map[string][]list)}
+	for _, pkg := range set.Packages {
+		ls, _ := r.listsOf(pkg)
+		for _, l := range ls {
+			for _, e := range l.elts {
+				spans = append(spans, span{pkg.Fset.Position(e.Pos()), pkg.Fset.Position(e.End())})
+			}
+		}
+	}
+	return func(d diag.Diag) bool {
+		return slices.ContainsFunc(spans, func(s span) bool {
+			return d.Pos.Filename == s.from.Filename && !before(d.Pos, s.from) && before(d.Pos, s.to)
+		})
+	}
+}
+
+// before reports whether a is before b, in one file.
+func before(a, b token.Position) bool {
+	return a.Line < b.Line || a.Line == b.Line && a.Column < b.Column
+}
+
 // hasLists reports whether pkg marks a variable //kanna:converter.
 func hasLists(pkg *packages.Package) bool {
 	ls, _ := (&listReader{lists: make(map[string][]list)}).listsOf(pkg)
@@ -234,9 +260,12 @@ func (r *listReader) entry(q queued, e ast.Expr) {
 	}
 }
 
-// named reads e, an element of the list q holds, which names obj.
+// named reads e, an element of the list q holds, which names obj, or nil
+// when e names nothing that type-checks.
 func (r *listReader) named(q queued, e ast.Expr, obj types.Object) {
 	switch obj := obj.(type) {
+	case nil:
+		r.diags = append(r.diags, diag.Errorf(q.l.pkg.Fset.Position(e.Pos()), "%s", notTypeChecked))
 	case *types.Func:
 		r.function(q, e, obj, obj.Signature(), false)
 	case *types.Var:
