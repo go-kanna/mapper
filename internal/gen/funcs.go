@@ -265,7 +265,7 @@ func (r *listReader) entry(q queued, e ast.Expr) {
 func (r *listReader) named(q queued, e ast.Expr, obj types.Object) {
 	switch obj := obj.(type) {
 	case nil:
-		r.diags = append(r.diags, diag.Errorf(q.l.pkg.Fset.Position(e.Pos()), "%s", notTypeChecked))
+		r.diags = append(r.diags, packages.NotTypeChecked(q.l.pkg.Fset.Position(e.Pos())))
 	case *types.Func:
 		r.function(q, e, obj, obj.Signature(), false)
 	case *types.Var:

@@ -160,8 +160,8 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 		role string
 		t    types.Type
 	}{{"source", src}, {"destination", dst}} {
-		if invalidType(side.t) {
-			diags = append(diags, diag.Errorf(pos, "%s", notTypeChecked))
+		if packages.Invalid(side.t) {
+			diags = append(diags, packages.NotTypeChecked(pos))
 			continue
 		}
 		if problem, hints := pairTypeProblem(side.t); problem != "" {
