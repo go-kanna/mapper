@@ -151,9 +151,7 @@ not supported.
 Code may call a declared function before the first run has written it, or as its declaration is about to change it.
 kanna-mapper type-checks the packages it loads once more with what it is about to write in place, and writes nothing
 while their code does not compile with it: a mistake the missing function hid is reported then, such as a field that
-what it returns does not have. Under `go generate ./...`, each package is generated on a run of its own, which stops
-while a package it imports calls functions not generated yet: the first time such packages are generated, run
-`go tool kanna-mapper ./...` once from the module root, or `go generate ./...` twice.
+what it returns does not have.
 
 Whether a function returns an error is up to its declaration. When a conversion it needs can fail, a declaration
 without the error stops generation and says which field needs it, so a signature changes only when you change it. A
@@ -405,11 +403,12 @@ kanna-mapper [flags] [packages]
 | `-v`            | list the files written, removed, or left unchanged                                           |
 | `-version`      | print the version                                                                            |
 
-The packages default to the one in the current directory, so `//go:generate go tool kanna-mapper` needs no argument.
-A run that succeeds prints nothing; one that finds no `//kanna:mapper` interface at all warns, naming the packages by
+The packages default to the one in the current directory, so `//go:generate go tool kanna-mapper` needs no argument. A
+run that succeeds prints nothing; one that finds no `//kanna:mapper` interface at all warns, naming the packages by
 import path. A package whose interfaces have all lost `//kanna:mapper` has its `mapper_gen.go` removed, unless code in
 the packages the run loads still calls its functions; a file of that name without the generated-code header is never
-touched.
+touched. The `go generate` that removes it ends with `open ...: no such file or directory`, from go generate itself,
+which lists a package's files before it runs the generators; the file is gone as it should be.
 
 ## Example
 
