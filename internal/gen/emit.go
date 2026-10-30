@@ -44,6 +44,11 @@ type emitter struct {
 }
 
 func (e *emitter) function() {
+	if e.pl.enum != nil {
+		e.enumFunction()
+		return
+	}
+
 	fn := e.pl.fn
 	srcT, dstT := e.typ(fn.src), e.typ(fn.dst)
 	e.src = e.s.Name(e.pl.param)
@@ -93,6 +98,49 @@ func (e *emitter) function() {
 		e.srcOneof(dst, o)
 	}
 	fmt.Fprintf(&e.b, "return %s\n}\n", e.ret(dst))
+}
+
+// enumFunction writes a function written for a pair of enums: a switch over
+// the constants of its source. A value matching none becomes the zero value of
+// protobuf going out, and an error coming back.
+func (e *emitter) enumFunction() {
+	fn, ep := e.pl.fn, e.pl.enum
+	dstT := e.typ(fn.dst)
+	e.src = e.s.Name(e.pl.param)
+
+	e.doc()
+	result := dstT
+	if fn.fallible {
+		result = "(" + dstT + ", error)"
+	}
+	fmt.Fprintf(&e.b, "func %s(%s %s) %s {\n", fn.name, e.src, e.typ(fn.src), result)
+	fmt.Fprintf(&e.b, "switch %s {\n", e.src)
+	for _, c := range ep.cases {
+		dst := `""`
+		if c.dst != nil {
+			dst = e.constant(c.dst)
+		}
+		fmt.Fprintf(&e.b, "case %s:\nreturn %s\n", e.constant(c.src), e.ret(dst))
+	}
+	e.b.WriteString("}\n")
+	if !fn.fallible {
+		zero := "0"
+		if ep.zero != nil {
+			zero = e.constant(ep.zero)
+		}
+		fmt.Fprintf(&e.b, "return %s\n}\n", zero)
+		return
+	}
+	fmt.Fprintf(&e.b, "return \"\", %s.Errorf(\"%s has no value for %%v\", %s)\n}\n",
+		e.f.Import("fmt", "fmt"), typeLabel(fn.dst), e.src)
+}
+
+// constant spells c, a package-level constant, as the file refers to it.
+func (e *emitter) constant(c *types.Const) string {
+	if q := e.f.Qualifier(c.Pkg()); q != "" {
+		return q + "." + c.Name()
+	}
+	return c.Name()
 }
 
 // doc writes the declaration's doc comment, or a sentence saying what the

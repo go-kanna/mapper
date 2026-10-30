@@ -19,7 +19,7 @@ go get -tool github.com/go-kanna/mapper/cmd/kanna-mapper
 ```
 
 There is no runtime to import: the generated code calls your types, the functions you list, and fmt, along with the
-constructors of your [value types](#value-types).
+constructors of your [value types](#value-types) and [enums](#enums).
 
 ## Use
 
@@ -283,6 +283,8 @@ Each field takes the first case that applies.
 | the destination is a pointer                                  | the address of the converted value                   |
 | the source is a value type of kanna-value                     | what its accessor returns, converted                 |
 | the destination is a value type of kanna-value                | its constructor called with the converted value      |
+| an enum of kanna-value and an enum of protobuf                | an unexported function matching their constants      |
+| the destination is an enum of kanna-value                     | its constructor called with the converted string     |
 | both are slices                                               | converted element by element; nil stays nil          |
 | both are maps with the same key type                          | converted value by value; nil stays nil              |
 | a lossless Go conversion                                      | `dst(v)`, unless both types are declared with `type` |
@@ -294,7 +296,8 @@ Each field takes the first case that applies.
 Two types declared with `type` never convert into each other on their own, even when one could be written as the
 other. A protobuf enum and a domain enum may both be `int32`, but on the wire 0 is `STATUS_UNSPECIFIED`, while in the
 domain it is likely a real status; converting the number would quietly change what it means. List a function between
-them. A declared type and a predeclared one still convert: `model.Email` → `string` is `string(src.Email)`.
+them, or make the domain's an [enum of kanna-value](#enums), which maps by name. A declared type and a predeclared one
+still convert: `model.Email` → `string` is `string(src.Email)`.
 
 A nil source stays nil whenever the destination is a pointer too. That includes a conversion that takes the source
 pointer itself, such as `(*timestamppb.Timestamp).AsTime` filling a `*time.Time`: it is called only when the source is
@@ -353,6 +356,57 @@ for the pair is called instead, as for any other type. An unexported value type 
 here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. So is a value type
 whose package this one sees only through another, whose export data carries the type without its constructor; list
 the constructor, such as `deep.NewLevel`, which brings the package in.
+
+## Enums
+
+An [enum of kanna-value](https://github.com/go-kanna/value#enums), a string type whose values are its constants, maps to
+and from an enum of protobuf by the names of their constants: the Go constant's past its type's, `Placed` in
+`OrderStatusPlaced`, and the protobuf value's past its enum's, `PLACED` in `ORDER_STATUS_PLACED`, compared regardless of
+case and underscores. A function is written for each direction:
+
+```go
+// orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.
+func orderStatusToOrderv1(src model.OrderStatus) orderv1.OrderStatus {
+	switch src {
+	case model.OrderStatusPlaced:
+		return orderv1.OrderStatus_ORDER_STATUS_PLACED
+	case model.OrderStatusPaid:
+		return orderv1.OrderStatus_ORDER_STATUS_PAID
+	}
+	return orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
+}
+
+// orderStatusToModel maps orderv1.OrderStatus to model.OrderStatus.
+func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
+	switch src {
+	case orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED:
+		return "", nil
+	case orderv1.OrderStatus_ORDER_STATUS_PLACED:
+		return model.OrderStatusPlaced, nil
+	case orderv1.OrderStatus_ORDER_STATUS_PAID:
+		return model.OrderStatusPaid, nil
+	}
+	return "", fmt.Errorf("model.OrderStatus has no value for %v", src)
+}
+```
+
+Protobuf's 0 and the domain's empty string both stand for no value, and map to each other, unless a constant matches the
+0 value by name. A value protobuf has and the domain does not, or a number nobody declared, is an error coming back, so
+a function mapping an enum from protobuf has to return one. A constant the domain has and protobuf does not stops
+generation instead:
+
+```console
+./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
+  add ORDER_STATUS_REFUNDED to it, or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
+```
+
+A plain string, such as a field a message carries as `string`, becomes an enum of kanna-value through its constructor,
+`NewOrderStatus`, which rejects a string that is none of the constants, the empty one included: map an optional field
+to a pointer. The other way, the enum is a string already, and converts as it is.
+
+An enum of protobuf is known by the shape protoc-gen-go gives it, an `int32` with an `Enum` method, and an enum of
+kanna-value by a string type with constants beside it, as kanna-mapper may see only the types of the package declaring
+it. A function listed for the pair is called instead, as for any other type.
 
 ## Protobuf oneofs
 

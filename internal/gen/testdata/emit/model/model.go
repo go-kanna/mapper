@@ -37,6 +37,28 @@ func (ReviewedAt) validate(t time.Time) error {
 	return nil
 }
 
+// Status is an enum of kanna-value, which maps to the wire's enum by the names
+// of their constants.
+//
+//kanna:enum
+type Status string
+
+const (
+	StatusActive  Status = "active"
+	StatusOnLeave Status = "on_leave"
+)
+
+// Shift is an enum of kanna-value that the wire carries as an optional string,
+// held to its constants by its constructor on the way back.
+//
+//kanna:enum
+type Shift string
+
+const (
+	ShiftDay   Shift = "day"
+	ShiftNight Shift = "night"
+)
+
 // Employee is the aggregate the functions map.
 type Employee struct {
 	// ID stands in for a UUID: rendered as a string, and parsed back from one,
@@ -58,6 +80,10 @@ type Employee struct {
 
 	Grade      Grade
 	ReviewedAt *ReviewedAt
+
+	Status Status
+	Former *Status
+	Shift  *Shift
 
 	// SyncedAt never crosses the wire.
 	SyncedAt time.Time `map:"-"`

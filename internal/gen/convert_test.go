@@ -173,6 +173,75 @@ func TestOps_ReuseWrittenFunctions(t *testing.T) {
 	}
 }
 
+// An enum of kanna-value maps to and from an enum of protobuf through a
+// function written for the pair, and is made from a string with its
+// constructor.
+func TestOps_Enums(t *testing.T) {
+	t.Parallel()
+
+	pkg := pkgtest.Load(t, map[string]string{"enum.go": `package test
+
+type Status string
+
+const StatusActive Status = "active"
+
+func NewStatus(v string) (Status, error) { return Status(v), nil }
+
+type Plain string
+
+const PlainA Plain = "a"
+
+type StatusPB int32
+
+const StatusPB_STATUS_ACTIVE StatusPB = 1
+
+func (x StatusPB) Enum() *StatusPB { return &x }
+
+type Number int32
+
+const NumberOne Number = 1
+`})
+
+	tests := []struct {
+		src, dst string
+		want     string
+		written  []string
+	}{
+		{src: "Status", dst: "StatusPB", want: "call:write(test.Status -> test.StatusPB)",
+			written: []string{"test.Status -> test.StatusPB"}},
+		{src: "StatusPB", dst: "Status", want: "call:write(test.StatusPB -> test.Status)",
+			written: []string{"test.StatusPB -> test.Status"}},
+		{src: "*StatusPB", dst: "*Status", want: "deref(addr(call:write(test.StatusPB -> test.Status)))",
+			written: []string{"test.StatusPB -> test.Status"}},
+		{src: "Plain", dst: "StatusPB", want: "call:write(test.Plain -> test.StatusPB)",
+			written: []string{"test.Plain -> test.StatusPB"}},
+
+		{src: "string", dst: "Status", want: "new:test.NewStatus(direct) (fallible)"},
+		{src: "*string", dst: "*Status", want: "deref(addr(new:test.NewStatus(direct))) (fallible)"},
+		{src: "Status", dst: "string", want: "cast:string"},
+
+		// Without a constructor, a string is converted as it is.
+		{src: "string", dst: "Plain", want: "cast:test.Plain"},
+		// An int32 without Enum is no enum of protobuf.
+		{src: "Status", dst: "Number", want: "none"},
+		{src: "StatusPB", dst: "int32", want: "cast:int32"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.src+" to "+tt.dst, func(t *testing.T) {
+			t.Parallel()
+
+			ops, written := gen.Ops(pkg, [2]string{tt.src, tt.dst})
+			if ops[0] != tt.want {
+				t.Errorf("op = %s, want %s", ops[0], tt.want)
+			}
+			if !slices.Equal(written, tt.written) {
+				t.Errorf("written = %q, want %q", written, tt.written)
+			}
+		})
+	}
+}
+
 // A value type of kanna-value is read through its accessor and made with its
 // constructor, what it holds converted as any other value.
 func TestOps_ValueTypes(t *testing.T) {

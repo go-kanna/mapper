@@ -165,6 +165,18 @@ func Plans(pkg *packages.Package) ([]string, []string) {
 					describeOp(a.op))
 			}
 		}
+		if ep := pl.enum; ep != nil {
+			for _, c := range ep.cases {
+				dst := `""`
+				if c.dst != nil {
+					dst = c.dst.Name()
+				}
+				fmt.Fprintf(&b, "\n  %s -> %s", c.src.Name(), dst)
+			}
+			if ep.zero != nil && !pl.fn.fallible {
+				fmt.Fprintf(&b, "\n  else -> %s", ep.zero.Name())
+			}
+		}
 		out[i] = b.String()
 	}
 	return out, spell(diags)
