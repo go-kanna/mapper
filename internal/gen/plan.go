@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kanna/internal/diag"
 	"github.com/go-kanna/internal/packages"
+	"github.com/go-kanna/internal/suggest"
 	"github.com/go-kanna/internal/valuetype"
 )
 
@@ -105,6 +106,10 @@ func (p *planner) plan(f *function, at site, param string, entries []entry) {
 	m, diags := matchFields(p.fset, at, f.src, f.dst, entries)
 	p.diags = append(p.diags, diags...)
 
+	var shared []string
+	if f.decl != nil {
+		shared = p.checkShared(f)
+	}
 	pl := &plan{fn: f, param: param}
 	p.at = at
 	for _, pair := range m.pairs {
@@ -113,7 +118,8 @@ func (p *planner) plan(f *function, at site, param string, entries []entry) {
 			p.planSrcArm(pl, f, at, pair)
 			continue
 		}
-		r, o, ok := p.fieldOp(f.src, pair.src.v, pair.dst)
+		share := slices.Contains(shared, pair.dst.Name()) || sharedByTag(f.dst, pair.dst) || sharedByTag(f.src, pair.src.v)
+		r, o, ok := p.fieldOp(f.src, pair.src.v, pair.dst, share)
 		if !ok {
 			p.diags = append(p.diags, p.cannotMap(at, structLabel(f.src)+"."+pair.src.v.Name(), pair.src.v.Type(),
 				structLabel(f.dst)+"."+pair.dst.Name(), pair.dst.Type()))
@@ -133,23 +139,55 @@ func (p *planner) plan(f *function, at site, param string, entries []entry) {
 // A read whose type is the destination's wins, whichever it is. Otherwise a
 // getter that turns a nil field into a zero value is passed over for the field
 // itself, which can hand the nil on.
-func (p *planner) fieldOp(src types.Type, field, dstField *types.Var) (read, op, bool) {
+func (p *planner) fieldOp(src types.Type, field, dstField *types.Var, share bool) (read, op, bool) {
+	conv := p.conv
+	conv.share = share
 	reads := readsOf(src, field)
 	dst := dstField.Type()
 	for _, r := range reads {
 		if types.Identical(r.typ, dst) {
-			return r, opDirect{}, true
+			return r, conv.same(dst), true
 		}
 	}
 	if len(reads) == 2 && nilable(reads[1].typ) && !nilable(reads[0].typ) {
 		reads[0], reads[1] = reads[1], reads[0]
 	}
 	for _, r := range reads {
-		if o, ok := p.conv.op(r.typ, dst); ok {
+		if o, ok := conv.op(r.typ, dst); ok {
 			return r, o, true
 		}
 	}
 	return read{}, nil, false
+}
+
+// checkShared returns the destination fields the //kanna:share of f names,
+// saying which of them is no field of the destination, or holds neither a
+// slice nor a map, which is all that is ever copied.
+func (p *planner) checkShared(f *function) []string {
+	_, st, _ := namedStruct(f.dst)
+	dsts := destinationNames(st)
+	var shared []string
+	for _, s := range f.decl.share {
+		i := slices.IndexFunc(dsts, func(n string) bool { return n == s.field })
+		if i < 0 {
+			d := diag.Errorf(s.pos, "%s: //kanna:%s %s names no field of %s", f.name, shareKey, s.field, structLabel(f.dst))
+			if c, ok := suggest.Closest(s.field, dsts); ok {
+				d = d.WithHints(fmt.Sprintf("did you mean %s?", c))
+			}
+			p.diags = append(p.diags, d)
+			continue
+		}
+		obj, _, _ := types.LookupFieldOrMethod(f.dst, true, nil, s.field)
+		switch obj.Type().Underlying().(type) {
+		case *types.Slice, *types.Map:
+			shared = append(shared, s.field)
+		default:
+			p.diags = append(p.diags, diag.Errorf(s.pos,
+				"%s: //kanna:%s %s: %s is of type %s, and only a slice or a map is copied",
+				f.name, shareKey, s.field, s.field, typeLabel(obj.Type())))
+		}
+	}
+	return shared
 }
 
 // readsOf lists the ways to read field from a src: its getter, when src

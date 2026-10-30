@@ -85,6 +85,11 @@ type Employee struct {
 	Former *Status
 	Shift  *Shift
 
+	// Tags is copied either way; Photo, tagged to be shared, is handed over as
+	// it is coming back, as //kanna:share has it going out.
+	Tags  []string
+	Photo []byte `map:",share"`
+
 	// SyncedAt never crosses the wire.
 	SyncedAt time.Time `map:"-"`
 }

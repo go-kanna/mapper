@@ -277,7 +277,7 @@ Each field takes the first case that applies.
 
 | Case                                                          | Result                                               |
 |---------------------------------------------------------------|------------------------------------------------------|
-| identical types                                               | assigned as is                                       |
+| identical types                                               | assigned as is; a slice or a map copied              |
 | a declared function or a listed conversion for the pair       | that function is called                              |
 | the source is a pointer                                       | dereferenced; nil leaves the destination zero        |
 | the destination is a pointer                                  | the address of the converted value                   |
@@ -305,6 +305,35 @@ set. Filling a `time.Time`, it is called with whatever the source holds, and dec
 the Unix epoch. List a function of your own to decide otherwise.
 
 The error of a conversion that fails names the destination field it was for: `map model.Employee.ID: invalid uuid`.
+
+## Copies
+
+A slice or a map of the same type on both sides is copied, with `slices.Clone` or `maps.Clone`, so that changing what
+the destination holds leaves the source as it was, and the other way round; nil stays nil. What it holds is not copied
+in turn, nor is a slice inside a struct of the same type: only the field mapped is.
+
+A field to hand over as it is, such as the bytes of a file, which the copy would double, is shared instead. Name it in
+a `//kanna:share` line of the function, a destination field, for a type you cannot tag, such as one protoc-gen-go
+writes; or tag a field of your own type `map:",share"`, or `map:"Name,share"`, for every function that maps it:
+
+```go
+//kanna:mapper
+type _ interface {
+	//kanna:share Content
+	DocumentToProto(model.Document) *docv1.Document
+}
+```
+
+```go
+func DocumentToProto(src model.Document) *docv1.Document {
+	return &docv1.Document{
+		Tags:    slices.Clone(src.Tags),
+		Content: src.Content,
+	}
+}
+```
+
+A `//kanna:share` naming no field of the destination, or one holding neither a slice nor a map, stops generation.
 
 ## Value types
 

@@ -281,6 +281,24 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"  declare it as F(test.D) (test.S, error)",
 		},
 		{
+			name: "a field to share that the destination lacks",
+			src: "type S struct{ Data []byte }\ntype D struct{ Data []byte }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\t//kanna:share Dat\n\tF(S) D\n}\n",
+			want: "test.go:12:2: error: F: //kanna:share Dat names no field of test.D\n  did you mean Data?",
+		},
+		{
+			name: "a field to share that holds no slice or map",
+			src: "type S struct{ N int }\ntype D struct{ N int }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\t//kanna:share N\n\tF(S) D\n}\n",
+			want: "test.go:12:2: error: F: //kanna:share N: N is of type int, and only a slice or a map is copied",
+		},
+		{
+			name: "an option of the tag it does not know",
+			src: "type S struct{ Data []byte `map:\",copy\"` }\ntype D struct{ Data []byte }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: `invalid map tag ",copy": the only option is share`,
+		},
+		{
 			name: "a name the package declares",
 			src: "type S struct{ A string }\ntype D struct{ A string }\n\n//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
 				"func F(s S) D { return D(s) }\n",
