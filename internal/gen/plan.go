@@ -60,6 +60,10 @@ type planner struct {
 	// function written on the way to say where it came from.
 	at    site
 	field string
+
+	// strict reports whether the function being planned is strict, and so may
+	// have no function written for a pair of structs.
+	strict bool
 }
 
 // planFuncs plans the functions ds declares in pkg and the ones written for
@@ -112,6 +116,10 @@ func (p *planner) plan(f *function, at site, param string, entries []entry) {
 	}
 	pl := &plan{fn: f, param: param}
 	p.at = at
+	p.strict = f.decl != nil && f.decl.strict
+	if p.strict {
+		p.checkNamed(f, at, m)
+	}
 	for _, pair := range m.pairs {
 		p.field = pair.dst.Name()
 		if pair.src.via != nil {
@@ -158,6 +166,27 @@ func (p *planner) fieldOp(src types.Type, field, dstField *types.Var, share bool
 		}
 	}
 	return read{}, nil, false
+}
+
+// checkNamed reports the destination fields of f, a strict function, that m
+// matched by name alone rather than by //kanna:map or a tag.
+func (p *planner) checkNamed(f *function, at site, m matched) {
+	unnamed := func(field string) {
+		p.diags = append(p.diags, diag.Errorf(at.pos,
+			"%s: %s.%s is not named; a strict mapping fills only the fields //kanna:map or a tag names",
+			f.name, structLabel(f.dst), field).
+			WithHints(fmt.Sprintf("add %s to the //kanna:map of %s, or %s=- to leave it zero", field, f.name, field)))
+	}
+	for _, pair := range m.pairs {
+		if !pair.named {
+			unnamed(pair.dst.Name())
+		}
+	}
+	for _, o := range m.oneofs {
+		if !o.named {
+			unnamed(o.field.Name())
+		}
+	}
 }
 
 // checkShared returns the destination fields the //kanna:share of f names,
@@ -279,6 +308,13 @@ func (p *planner) find(src, dst types.Type) (*function, bool) {
 // write makes the function for the pair of structs or of enums src and dst, to
 // be planned after the one being planned now.
 func (p *planner) write(src, dst types.Type) *function {
+	if p.strict && !enumPair(src, dst) {
+		p.diags = append(p.diags, diag.Errorf(p.at.pos,
+			"%s: %s: a strict mapping writes no function of its own for %s to %s, whose fields it would fill unnamed",
+			p.at.path, p.field, typeLabel(src), typeLabel(dst)).
+			WithHints(fmt.Sprintf("declare %s(%s) %s in the interface, and name its fields",
+				exported(helperName(src, dst)), typeLabel(src), typeLabel(dst))))
+	}
 	f := &function{name: p.name(helperName(src, dst)), src: src, dst: dst}
 	p.funcs = append(p.funcs, f)
 	p.queue = append(p.queue, f)

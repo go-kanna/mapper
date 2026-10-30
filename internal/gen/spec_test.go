@@ -104,8 +104,8 @@ func TestDecls_Diagnostics(t *testing.T) {
 		},
 		{
 			name: "arguments",
-			src:  "//kanna:mapper strict\ntype _ interface{ F(E) W }\n",
-			want: `test.go:3:1: error: //kanna:mapper takes no arguments, got "strict"`,
+			src:  "//kanna:mapper lenient\ntype _ interface{ F(E) W }\n",
+			want: `test.go:3:1: error: //kanna:mapper takes no argument but strict, got "lenient"`,
 		},
 		{
 			name: "misspelled",
@@ -191,9 +191,9 @@ func TestDecls_Diagnostics(t *testing.T) {
 				"  types generated with protobuf's Opaque API are not supported",
 		},
 		{
-			name: "//kanna:map without =",
-			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Revision\n\tF(E) W\n}\n",
-			want: `test.go:5:2: error: //kanna:map: "Revision" is not Field=Source or Field=-`,
+			name: "//kanna:map with nothing after =",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Revision=\n\tF(E) W\n}\n",
+			want: `test.go:5:2: error: //kanna:map: "" is not a field name`,
 		},
 		{
 			name: "//kanna:map with a bad field",
@@ -213,7 +213,7 @@ func TestDecls_Diagnostics(t *testing.T) {
 		{
 			name: "//kanna:map saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map\n\tF(E) W\n}\n",
-			want: "test.go:5:2: error: //kanna:map needs at least one Field=Source or Field=-",
+			want: "test.go:5:2: error: //kanna:map needs at least one Field, Field=Source, or Field=-",
 		},
 		{
 			name: "a name declared by two interfaces",

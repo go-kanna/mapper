@@ -61,6 +61,10 @@ func (a oneofArm) label(oneof string) string {
 type oneofMatch struct {
 	field *types.Var
 	arms  []armMatch
+
+	// named reports whether //kanna:map names the oneof, as a strict mapping
+	// requires.
+	named bool
 }
 
 type armMatch struct {

@@ -270,6 +270,31 @@ type _ interface {
 destination would. An entry naming no field of the destination is an error, with the field it was probably meant to
 name. An entry takes the place of the tags for its field, in that function only, so a struct filled from several types
 can read each under its own name.
+`Field` alone changes nothing about how the field is filled, but names it, as a [strict](#strict-mappings) mapping
+requires.
+
+### Strict mappings
+
+A destination field with a source of the same name is filled without a word, which is the point within a service, but
+not where the destination is what the service shows the world: a field added to the domain and to a response type of
+the same name goes out unreviewed. Mark the interface of such functions `//kanna:mapper strict`, and each destination
+field has to be named for its function, by `//kanna:map` or by a tag, the destination's or the source's naming it:
+
+```go
+//kanna:mapper strict
+type _ interface {
+	//kanna:map ID Name Email=ContactEmail Internal=-
+	UserToPublic(model.User) api.User
+}
+```
+
+A field matched by its name alone stops generation, and so does a pair of structs a strict function would write a
+function of its own for, as it would fill that one's fields unnamed; declare it in the interface, and name its fields:
+
+```console
+./mapper.go:15:2: error: UserToPublic: api.User.RecoveryToken is not named; a strict mapping fills only the fields //kanna:map or a tag names
+  add RecoveryToken to the //kanna:map of UserToPublic, or RecoveryToken=- to leave it zero
+```
 
 ## How values are converted
 

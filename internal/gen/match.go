@@ -35,6 +35,10 @@ type site struct {
 type fieldPair struct {
 	dst *types.Var
 	src sourceField
+
+	// named reports whether the source was named for dst, by //kanna:map or a
+	// tag, rather than matched by name alone.
+	named bool
 }
 
 // sourceField is a field of the source struct that a destination field can be
@@ -90,8 +94,8 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 		switch {
 		case hasEntry && e.excluded(), !hasEntry && excluded:
 			continue
-		case hasEntry:
-			out.pairs = append(out.pairs, fieldPair{dst: f, src: m.named(e.source, sources)})
+		case hasEntry && !e.approves():
+			out.pairs = append(out.pairs, fieldPair{dst: f, src: m.named(e.source, sources), named: true})
 			continue
 		}
 
@@ -99,13 +103,14 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 		// taken apart as a oneof.
 		if arms := oneofArms(f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) {
 			if o, ok := m.dstOneof(f, arms, sources, byField, srcStruct); ok {
+				o.named = hasEntry
 				out.oneofs = append(out.oneofs, o)
 			}
 			continue
 		}
 		label := structLabel(dst) + "." + f.Name()
 		if sf, ok := m.source(f.Name(), label, f, tag, sources, srcStruct); ok {
-			out.pairs = append(out.pairs, fieldPair{dst: f, src: sf})
+			out.pairs = append(out.pairs, fieldPair{dst: f, src: sf, named: hasEntry || tag != "" || sf.tag == f.Name()})
 		}
 	}
 
@@ -176,7 +181,8 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 			ok = false
 		}
 		switch {
-		case e.excluded(), slices.ContainsFunc(sources, func(sf sourceField) bool { return sf.v.Name() == e.source }):
+		case e.excluded(), e.approves(),
+			slices.ContainsFunc(sources, func(sf sourceField) bool { return sf.v.Name() == e.source }):
 		case hasField(srcStruct, e.source):
 			m.diags = append(m.diags, diag.Errorf(e.pos, "//kanna:%s %s=%s: %s.%s is tagged map:\"-\"",
 				mapKey, e.field, e.source, structLabel(m.src), e.source))
