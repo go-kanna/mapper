@@ -310,6 +310,8 @@ func describeOp(o op) string {
 		return "map(" + describeOp(o.elem) + ")"
 	case opCast:
 		return "cast:" + typeLabel(o.dst)
+	case opClone:
+		return "clone:" + o.pkg
 	case opGet:
 		return "get:" + o.accessor + "(" + describeOp(o.elem) + ")"
 	case opNew:

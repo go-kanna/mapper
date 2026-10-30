@@ -80,6 +80,9 @@ type Employee struct {
 	Status Status
 	Former *Status
 	Shift  *string
+
+	Tags  []string
+	Photo []byte
 }
 
 // GetBackup reads a proto3 optional field: nil becomes "".

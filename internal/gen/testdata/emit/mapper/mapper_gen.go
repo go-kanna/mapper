@@ -5,6 +5,7 @@ package mapper
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/go-kanna/mapper/internal/gen/testdata/emit/model"
@@ -82,6 +83,8 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		Status:     statusToWire(src.Status),
 		Former:     v16,
 		Shift:      v19,
+		Tags:       slices.Clone(src.Tags),
+		Photo:      src.Photo,
 	}
 }
 
@@ -191,6 +194,8 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		Status:     v22,
 		Former:     v23,
 		Shift:      v26,
+		Tags:       slices.Clone(e.Tags),
+		Photo:      e.Photo,
 	}, nil
 }
 

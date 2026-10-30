@@ -60,6 +60,10 @@ func TestOps(t *testing.T) {
 		written  []string
 	}{
 		{src: "string", dst: "string", want: "direct"},
+		// A slice or a map of the same type is copied, so that the two share nothing.
+		{src: "[]string", dst: "[]string", want: "clone:slices"},
+		{src: "map[string]int", dst: "map[string]int", want: "clone:maps"},
+		{src: "*[]string", dst: "*[]string", want: "direct"},
 
 		// What a list names comes before anything Go could do.
 		{src: "netip.Addr", dst: "string", want: "conv:netip.Addr.String"},

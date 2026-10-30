@@ -4,6 +4,7 @@ package mapper
 
 import (
 	"fmt"
+	"slices"
 	"uuid"
 
 	"github.com/go-kanna/mapper/example/gen/employeev1"
@@ -21,7 +22,7 @@ func EmployeeToProto(emp model.Employee) *employeev1.Employee {
 		HiredAt:   timestamppb.New(emp.HiredAt),
 		Status:    statusToProto(emp.Status),
 		Address:   addressToEmployeev1(emp.Address),
-		Nicknames: emp.Nicknames,
+		Nicknames: slices.Clone(emp.Nicknames),
 		Contact:   contactToEmployeev1(emp.Contact),
 	}
 }
@@ -42,7 +43,7 @@ func EmployeeFromProto(emp *employeev1.Employee) (model.Employee, error) {
 		HiredAt:   emp.GetHiredAt().AsTime(),
 		Status:    statusFromProto(emp.GetStatus()),
 		Address:   addressToModel(emp.GetAddress()),
-		Nicknames: emp.GetNicknames(),
+		Nicknames: slices.Clone(emp.GetNicknames()),
 		Contact:   contactToModel(emp.GetContact()),
 	}, nil
 }

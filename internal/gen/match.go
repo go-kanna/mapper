@@ -145,8 +145,15 @@ func carriesType(sources []sourceField, t types.Type) bool {
 // out.
 func (m *matching) tag(st *types.Struct, i int) (string, bool) {
 	tag, ok := reflect.StructTag(st.Tag(i)).Lookup(tagKey)
+	tag, opt, _ := strings.Cut(tag, ",")
 	switch {
 	case !ok:
+		return "", false
+	case opt != "" && opt != "share":
+		m.diags = append(m.diags, diag.Errorf(m.pos(st.Field(i)), "invalid map tag %q: the only option is share",
+			reflect.StructTag(st.Tag(i)).Get(tagKey)))
+		return "", true
+	case tag == "" && opt != "":
 		return "", false
 	case tag == "-":
 		return "", true
@@ -289,7 +296,7 @@ func (m *matching) promotedField(name string) (*types.Var, bool) {
 	if !ok {
 		return nil, false
 	}
-	if _, tagged := reflect.StructTag(st.Tag(index[len(index)-1])).Lookup(tagKey); tagged {
+	if tagName(st.Tag(index[len(index)-1])) != "" {
 		return nil, false
 	}
 	return v, true
@@ -307,7 +314,7 @@ func embeddedStruct(t types.Type, path []int) (*types.Struct, bool) {
 	_, st, _ := namedStruct(t)
 	for _, i := range path {
 		next, ok := st.Field(i).Type().Underlying().(*types.Struct)
-		if !ok || reflect.StructTag(st.Tag(i)).Get(tagKey) == "-" {
+		if !ok || tagName(st.Tag(i)) == "-" {
 			return nil, false
 		}
 		st = next
@@ -409,4 +416,36 @@ func exportedNames(st *types.Struct) []string {
 func structLabel(t types.Type) string {
 	named, _, _ := namedStruct(t)
 	return typeLabel(named)
+}
+
+// tagName returns the field the map tag of a field names, or "-", without its
+// options.
+func tagName(tag string) string {
+	name, _, _ := strings.Cut(reflect.StructTag(tag).Get(tagKey), ",")
+	return name
+}
+
+// sharedByTag reports whether v, a field of the struct t or of a struct it
+// embeds, is tagged map:",share", or map:"Name,share".
+func sharedByTag(t types.Type, v *types.Var) bool {
+	_, st, ok := namedStruct(t)
+	if !ok {
+		return false
+	}
+	_, index, _ := types.LookupFieldOrMethod(t, true, v.Pkg(), v.Name())
+	for i, n := range index {
+		if n >= st.NumFields() {
+			return false
+		}
+		if i == len(index)-1 {
+			_, opt, _ := strings.Cut(reflect.StructTag(st.Tag(n)).Get(tagKey), ",")
+			return opt == "share"
+		}
+		next, ok := types.Unalias(st.Field(n).Type()).Underlying().(*types.Struct)
+		if !ok {
+			return false
+		}
+		st = next
+	}
+	return false
 }

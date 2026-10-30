@@ -38,6 +38,37 @@ func employee() model.Employee {
 		Status: model.StatusOnLeave,
 		Former: new(model.StatusActive),
 		Shift:  new(model.ShiftNight),
+
+		Tags:  []string{"go"},
+		Photo: []byte{0xff, 0xd8},
+	}
+}
+
+// A slice of the same type is copied, unless the field is to be shared: changing
+// what one side holds then changes the other's, in either direction.
+func TestGenerated_Copies(t *testing.T) {
+	t.Parallel()
+
+	in := employee()
+	w := mapper.EmployeeToWire(in)
+	w.Tags[0] = "changed in the wire"
+	w.Photo[0] = 0
+	if in.Tags[0] != "go" {
+		t.Errorf("Tags[0] = %q after the wire's was changed, want it copied, and still %q", in.Tags[0], "go")
+	}
+	if in.Photo[0] != 0 {
+		t.Errorf("Photo[0] = %#x after the wire's was changed, want it shared, as //kanna:share has it", in.Photo[0])
+	}
+
+	back, err := mapper.EmployeeFromWire(&wire.Employee{Id: "192.0.2.1", Tags: []string{"go"}, Photo: []byte{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Tags == nil || back.Photo == nil {
+		t.Fatalf("EmployeeFromWire() = %+v, want Tags and Photo", back)
+	}
+	if mapper.EmployeeToWire(model.Employee{}).Tags != nil {
+		t.Error("Tags of the zero employee is not nil: a copy of nil should stay nil")
 	}
 }
 

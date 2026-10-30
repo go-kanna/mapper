@@ -72,6 +72,11 @@ type opMap struct {
 // opCast is a Go conversion, dst(v).
 type opCast struct{ dst types.Type }
 
+// opClone copies a slice or a map of the same type with the Clone of pkg,
+// "slices" or "maps", so that the destination shares nothing with the source.
+// What it holds is not copied in turn.
+type opClone struct{ pkg string }
+
 // opGet converts the value a value type of kanna-value holds, read with its
 // accessor.
 type opGet struct {
@@ -98,6 +103,7 @@ func (o opGuard) fallible() bool { return o.elem.fallible() }
 func (o opSlice) fallible() bool { return o.elem.fallible() }
 func (o opMap) fallible() bool   { return o.elem.fallible() }
 func (opCast) fallible() bool    { return false }
+func (opClone) fallible() bool   { return false }
 func (o opGet) fallible() bool   { return o.elem.fallible() }
 func (opNew) fallible() bool     { return true }
 
@@ -106,6 +112,10 @@ type converter struct {
 	pkg   *types.Package // the package generated into
 	convs convs
 	funcs functions
+
+	// share hands a slice or a map of the same type on as it is, rather than a
+	// copy, for a field that //kanna:share or map:",share" names.
+	share bool
 }
 
 // op returns how a src becomes a dst, or false when nothing can make it one.
@@ -131,7 +141,7 @@ func (c converter) op(src, dst types.Type) (op, bool) {
 func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	src, dst = types.Unalias(src), types.Unalias(dst)
 	if types.Identical(src, dst) {
-		return opDirect{}, true
+		return c.same(dst), true
 	}
 	if cv, ok := c.convs.lookup(src, dst); ok {
 		return opConv{cv}, true
@@ -202,6 +212,21 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		return opCall{c.funcs.write(src, dst)}, true
 	}
 	return nil, false
+}
+
+// same returns how a value of type t becomes one of t: as it is, or, for a slice
+// or a map not to be shared, as a copy.
+func (c converter) same(t types.Type) op {
+	if c.share {
+		return opDirect{}
+	}
+	switch t.Underlying().(type) {
+	case *types.Slice:
+		return opClone{pkg: "slices"}
+	case *types.Map:
+		return opClone{pkg: "maps"}
+	}
+	return opDirect{}
 }
 
 // callable reports whether code in pkg can make a value of v, a value type of

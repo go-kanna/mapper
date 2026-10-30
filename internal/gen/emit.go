@@ -238,6 +238,8 @@ func (e *emitter) expr(o op, val string) (string, bool) {
 		return val, true
 	case opCast:
 		return e.typ(o.dst) + "(" + val + ")", true
+	case opClone:
+		return e.f.Import(o.pkg, o.pkg) + ".Clone(" + val + ")", true
 	case opConv:
 		return e.callConv(o.c, val), !o.c.fallible
 	case opCall:

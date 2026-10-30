@@ -16,6 +16,7 @@ type _ interface {
 	// The server sets Revision.
 	//
 	//kanna:map Revision=-
+	//kanna:share Photo
 	EmployeeToWire(model.Employee) *wire.Employee
 	EmployeeFromWire(e *wire.Employee) (model.Employee, error)
 }

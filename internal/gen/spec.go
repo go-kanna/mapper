@@ -20,6 +20,10 @@ const mapperKey = "mapper"
 // fields of one function read.
 const mapKey = "map"
 
+// shareKey spells the directive //kanna:share, which names the destination
+// fields whose slices and maps are handed on as they are rather than copied.
+const shareKey = "share"
+
 // decl is a function a //kanna:mapper interface declares.
 type decl struct {
 	name string
@@ -38,6 +42,10 @@ type decl struct {
 
 	pos     token.Position
 	entries []entry
+
+	// share names the destination fields of //kanna:share, whose slices and
+	// maps are handed on as they are rather than copied. Only field is set.
+	share []entry
 }
 
 // entry is one Field=Source of a //kanna:map line.
@@ -171,7 +179,8 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 	}
 
 	entries, ds := mapEntries(fset, doc)
-	if diags = append(diags, ds...); diag.HasErrors(diags) {
+	share, ds2 := shareEntries(fset, doc)
+	if diags = append(append(diags, ds...), ds2...); diag.HasErrors(diags) {
 		return decl{}, diags
 	}
 
@@ -188,6 +197,7 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 		doc:      strings.TrimSpace(doc.Text()),
 		pos:      pos,
 		entries:  entries,
+		share:    share,
 	}, diags
 }
 
@@ -241,6 +251,28 @@ func hasGetter(named *types.Named) bool {
 		}
 	}
 	return false
+}
+
+// shareEntries reads the //kanna:share line of doc: the destination fields to
+// hand on as they are. Whether each names a field that exists is for the
+// function's plan to say.
+func shareEntries(fset *token.FileSet, doc *ast.CommentGroup) ([]entry, []diag.Diag) {
+	d, diags := directive.Find(fset, doc, shareKey)
+	if !d.Found {
+		return nil, diags
+	}
+	if d.Args == "" {
+		return nil, append(diags, diag.Errorf(d.Pos, "//kanna:%s needs at least one field", shareKey))
+	}
+	var share []entry
+	for field := range strings.FieldsSeq(d.Args) {
+		if !token.IsIdentifier(field) {
+			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", shareKey, field))
+			continue
+		}
+		share = append(share, entry{field: field, pos: d.Pos})
+	}
+	return share, diags
 }
 
 // mapEntries reads the //kanna:map line of doc. Whether each entry names a
