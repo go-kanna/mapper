@@ -22,6 +22,10 @@ type plan struct {
 	fields    []fieldPlan
 	dstOneofs []dstOneofPlan
 	srcOneofs []srcOneofPlan
+
+	// enum is the body of a function written for a pair of enums instead, or
+	// nil.
+	enum *enumPlan
 }
 
 // fieldPlan fills one destination field.
@@ -93,6 +97,11 @@ func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]t
 
 // plan plans f, whose problems go to at.
 func (p *planner) plan(f *function, at site, param string, entries []entry) {
+	if enumPair(f.src, f.dst) {
+		p.plans = append(p.plans, p.planEnum(f, at))
+		return
+	}
+
 	m, diags := matchFields(p.fset, at, f.src, f.dst, entries)
 	p.diags = append(p.diags, diags...)
 
@@ -201,6 +210,12 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 	return d
 }
 
+// namedOf returns the declared type that t is or points to.
+func namedOf(t types.Type) *types.Named {
+	named, _ := types.Unalias(derefType(t)).(*types.Named)
+	return named
+}
+
 // derefType returns what t points to, or t when it is not a pointer.
 func derefType(t types.Type) types.Type {
 	if p, ok := types.Unalias(t).(*types.Pointer); ok {
@@ -223,8 +238,8 @@ func (p *planner) find(src, dst types.Type) (*function, bool) {
 	return p.funcs[i], true
 }
 
-// write makes the function for the pair of structs src and dst, to be planned
-// after the one being planned now.
+// write makes the function for the pair of structs or of enums src and dst, to
+// be planned after the one being planned now.
 func (p *planner) write(src, dst types.Type) *function {
 	f := &function{name: p.name(helperName(src, dst)), src: src, dst: dst}
 	p.funcs = append(p.funcs, f)
@@ -252,8 +267,7 @@ func (p *planner) name(base string) string {
 // addressToEmployeev1 for model.Address to employeev1.Address, the package
 // standing in for a type name the two share.
 func helperName(src, dst types.Type) string {
-	s, _, _ := namedStruct(src)
-	d, _, _ := namedStruct(dst)
+	s, d := namedOf(src), namedOf(dst)
 	to := d.Obj().Name()
 	if to == s.Obj().Name() {
 		to = exported(d.Obj().Pkg().Name())

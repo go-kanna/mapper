@@ -3,6 +3,7 @@ package gen
 import (
 	"go/types"
 
+	"github.com/go-kanna/internal/enumtype"
 	"github.com/go-kanna/internal/valuetype"
 )
 
@@ -80,7 +81,8 @@ type opGet struct {
 
 // opNew converts the value to what a value type of kanna-value holds, held,
 // and makes one of it with the type's constructor, which fails when the type's
-// rule rejects it.
+// rule rejects it. An enum of kanna-value is made the same way from a string,
+// which its constructor rejects unless it is the value of a constant.
 type opNew struct {
 	ctor *types.Func
 	held types.Type
@@ -119,6 +121,8 @@ func (c converter) op(src, dst types.Type) (op, bool) {
 }
 
 // try is op, writing functions for pairs of structs only when write is set.
+// A function for a pair of enums is written whenever it is met, as no other
+// function maps the pair.
 //
 // A source pointer is dereferenced before a destination pointer is taken, so
 // that nil stays nil rather than becoming a pointer to a zero value. When the
@@ -164,6 +168,18 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		}
 	}
 
+	if enumPair(src, dst) {
+		return opCall{c.funcs.write(src, dst)}, true
+	}
+	// An enum of kanna-value is made with its constructor, so that a string
+	// from the wire is held to the constants.
+	if e, ok := enumtype.Of(dst); ok && callableFunc(e.Constructor, c.pkg) {
+		str := types.Typ[types.String]
+		if o, ok := c.try(src, str, write); ok {
+			return opNew{ctor: e.Constructor, held: str, elem: o}, true
+		}
+	}
+
 	if ss, ok := src.Underlying().(*types.Slice); ok {
 		if ds, ok := dst.Underlying().(*types.Slice); ok {
 			if e, ok := c.try(ss.Elem(), ds.Elem(), write); ok {
@@ -191,7 +207,13 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 // callable reports whether code in pkg can make a value of v, a value type of
 // kanna-value: its constructor is loaded, and declared in pkg or exported.
 func callable(v valuetype.Type, pkg *types.Package) bool {
-	return v.Constructor != nil && (v.Constructor.Exported() || v.Constructor.Pkg() == pkg)
+	return callableFunc(v.Constructor, pkg)
+}
+
+// callableFunc reports whether code in pkg can call fn: it is loaded, and
+// declared in pkg or exported.
+func callableFunc(fn *types.Func, pkg *types.Package) bool {
+	return fn != nil && (fn.Exported() || fn.Pkg() == pkg)
 }
 
 // writable reports whether a function can be written for src and dst: both

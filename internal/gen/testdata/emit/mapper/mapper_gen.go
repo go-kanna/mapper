@@ -53,6 +53,16 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 	if v15 := src.ReviewedAt; v15 != nil {
 		v14 = wire.NewTimestamp((*v15).Time())
 	}
+	var v16 *wire.Status
+	if v17 := src.Former; v17 != nil {
+		v18 := statusToWire(*v17)
+		v16 = &v18
+	}
+	var v19 *string
+	if v20 := src.Shift; v20 != nil {
+		v21 := string(*v20)
+		v19 = &v21
+	}
 	return &wire.Employee{
 		Id:         src.ID.String(),
 		Name:       src.FullName,
@@ -69,6 +79,9 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		Peers:      v12,
 		Grade:      src.Grade.Int32(),
 		ReviewedAt: v14,
+		Status:     statusToWire(src.Status),
+		Former:     v16,
+		Shift:      v19,
 	}
 }
 
@@ -139,6 +152,26 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		}
 		v19 = &v21
 	}
+	v22, err := statusToModel(e.Status)
+	if err != nil {
+		return model.Employee{}, fmt.Errorf("map model.Employee.Status: %w", err)
+	}
+	var v23 *model.Status
+	if v24 := e.Former; v24 != nil {
+		v25, err := statusToModel(*v24)
+		if err != nil {
+			return model.Employee{}, fmt.Errorf("map model.Employee.Former: %w", err)
+		}
+		v23 = &v25
+	}
+	var v26 *model.Shift
+	if v27 := e.Shift; v27 != nil {
+		v28, err := model.NewShift(*v27)
+		if err != nil {
+			return model.Employee{}, fmt.Errorf("map model.Employee.Shift: %w", err)
+		}
+		v26 = &v28
+	}
 	return model.Employee{
 		ID:         v,
 		FullName:   e.GetName(),
@@ -155,6 +188,9 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		Peers:      v15,
 		Grade:      v18,
 		ReviewedAt: v19,
+		Status:     v22,
+		Former:     v23,
+		Shift:      v26,
 	}, nil
 }
 
@@ -174,6 +210,17 @@ func contactToWire(src model.Contact) *wire.Contact {
 		dst.Kind = &wire.Contact_Postal{Postal: addressToWire(*v2)}
 	}
 	return dst
+}
+
+// statusToWire maps model.Status to wire.Status.
+func statusToWire(src model.Status) wire.Status {
+	switch src {
+	case model.StatusActive:
+		return wire.Status_STATUS_ACTIVE
+	case model.StatusOnLeave:
+		return wire.Status_STATUS_ON_LEAVE
+	}
+	return wire.Status_STATUS_UNSPECIFIED
 }
 
 // addressToModel maps *wire.Address to model.Address.
@@ -203,4 +250,17 @@ func contactToModel(src *wire.Contact) model.Contact {
 		}
 	}
 	return dst
+}
+
+// statusToModel maps wire.Status to model.Status.
+func statusToModel(src wire.Status) (model.Status, error) {
+	switch src {
+	case wire.Status_STATUS_UNSPECIFIED:
+		return "", nil
+	case wire.Status_STATUS_ACTIVE:
+		return model.StatusActive, nil
+	case wire.Status_STATUS_ON_LEAVE:
+		return model.StatusOnLeave, nil
+	}
+	return "", fmt.Errorf("model.Status has no value for %v", src)
 }

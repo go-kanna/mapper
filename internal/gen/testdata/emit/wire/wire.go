@@ -3,7 +3,10 @@
 // and a oneof.
 package wire
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // Timestamp stands in for timestamppb.Timestamp.
 type Timestamp struct {
@@ -21,6 +24,37 @@ func (x *Timestamp) AsTime() time.Time {
 		return time.Unix(0, 0).UTC()
 	}
 	return time.Unix(x.Seconds, 0).UTC()
+}
+
+// Status is an enum as protoc-gen-go writes one. RETIRED has no counterpart
+// in the domain.
+type Status int32
+
+const (
+	Status_STATUS_UNSPECIFIED Status = 0
+	Status_STATUS_ACTIVE      Status = 1
+	Status_STATUS_ON_LEAVE    Status = 2
+	Status_STATUS_RETIRED     Status = 3
+)
+
+var Status_name = map[int32]string{
+	0: "STATUS_UNSPECIFIED",
+	1: "STATUS_ACTIVE",
+	2: "STATUS_ON_LEAVE",
+	3: "STATUS_RETIRED",
+}
+
+func (x Status) Enum() *Status {
+	p := new(Status)
+	*p = x
+	return p
+}
+
+func (x Status) String() string {
+	if name, ok := Status_name[int32(x)]; ok {
+		return name
+	}
+	return strconv.Itoa(int(x))
 }
 
 type Employee struct {
@@ -42,6 +76,10 @@ type Employee struct {
 
 	Grade      int32
 	ReviewedAt *Timestamp
+
+	Status Status
+	Former *Status
+	Shift  *string
 }
 
 // GetBackup reads a proto3 optional field: nil becomes "".

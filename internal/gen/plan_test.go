@@ -262,6 +262,25 @@ func TestPlans_Diagnostics(t *testing.T) {
 				" and add //kanna:map Etag=-",
 		},
 		{
+			name: "a constant of an enum with no counterpart",
+			src: "type Status string\n\n" +
+				"const (\n\tStatusActive Status = \"active\"\n\tStatusRefunded Status = \"refunded\"\n)\n\n" +
+				"type State int32\n\nconst State_STATE_ACTIVE State = 1\n\nfunc (x State) Enum() *State { return &x }\n\n" +
+				"type S struct{ Status Status }\ntype D struct{ Status State }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "test.go:25:2: error: F: Status: test.StatusRefunded has no counterpart in test.State\n" +
+				"  add STATE_REFUNDED to it, or list a func(test.Status) test.State in a //kanna:converter list",
+		},
+		{
+			name: "an enum coming back from protobuf",
+			src: "type Status string\n\nconst StatusActive Status = \"active\"\n\n" +
+				"type State int32\n\nconst State_STATE_ACTIVE State = 1\n\nfunc (x State) Enum() *State { return &x }\n\n" +
+				"type S struct{ Status Status }\ntype D struct{ Status State }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(D) S\n}\n",
+			want: "test.go:22:2: error: F has to return an error: Status is mapped by stateToStatus, which can fail\n" +
+				"  declare it as F(test.D) (test.S, error)",
+		},
+		{
 			name: "a name the package declares",
 			src: "type S struct{ A string }\ntype D struct{ A string }\n\n//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
 				"func F(s S) D { return D(s) }\n",
@@ -279,6 +298,70 @@ func TestPlans_Diagnostics(t *testing.T) {
 				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
 			}
 		})
+	}
+}
+
+// The constants of an enum of kanna-value and of protobuf are matched by their
+// names, past the names of their types. A value in neither direction's cases
+// becomes the unspecified value going out and an error coming back.
+func TestPlans_Enums(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type OrderStatus string
+
+const (
+	OrderStatusPlaced  OrderStatus = "placed"
+	OrderStatusOnHold  OrderStatus = "on_hold"
+	OrderStatusSettled OrderStatus = "settled"
+)
+
+// Order_Status is an enum declared in the message Order, whose constants
+// protoc-gen-go names after the message. CANCELLED is an alias of CANCELED.
+type Order_Status int32
+
+const (
+	Order_STATUS_UNSPECIFIED Order_Status = 0
+	Order_STATUS_PLACED      Order_Status = 1
+	Order_STATUS_ON_HOLD     Order_Status = 2
+	Order_SETTLED            Order_Status = 3
+	Order_STATUS_CANCELED    Order_Status = 4
+	Order_STATUS_CANCELLED   Order_Status = 4
+)
+
+func (x Order_Status) Enum() *Order_Status { return &x }
+
+type Order struct{ Status OrderStatus }
+
+type OrderPB struct{ Status Order_Status }
+
+//kanna:mapper
+type _ interface {
+	OrderToPB(Order) OrderPB
+	OrderFromPB(OrderPB) (Order, error)
+}
+`}))
+
+	want := []string{
+		"OrderToPB(src test.Order) test.OrderPB\n  Status = .Status call:orderStatusToOrder_Status",
+		"OrderFromPB(src test.OrderPB) test.Order (fallible)\n  Status = .Status call:order_StatusToOrderStatus",
+		"orderStatusToOrder_Status(src test.OrderStatus) test.Order_Status\n" +
+			"  OrderStatusPlaced -> Order_STATUS_PLACED\n" +
+			"  OrderStatusOnHold -> Order_STATUS_ON_HOLD\n" +
+			"  OrderStatusSettled -> Order_SETTLED\n" +
+			"  else -> Order_STATUS_UNSPECIFIED",
+		"order_StatusToOrderStatus(src test.Order_Status) test.OrderStatus (fallible)\n" +
+			`  Order_STATUS_UNSPECIFIED -> ""` + "\n" +
+			"  Order_STATUS_PLACED -> OrderStatusPlaced\n" +
+			"  Order_STATUS_ON_HOLD -> OrderStatusOnHold\n" +
+			"  Order_SETTLED -> OrderStatusSettled",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
 	}
 }
 

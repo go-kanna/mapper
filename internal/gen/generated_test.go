@@ -34,6 +34,10 @@ func employee() model.Employee {
 
 		Grade:      model.MustGrade(3),
 		ReviewedAt: new(model.MustReviewedAt(time.Date(2025, time.October, 1, 0, 0, 0, 0, time.UTC))),
+
+		Status: model.StatusOnLeave,
+		Former: new(model.StatusActive),
+		Shift:  new(model.ShiftNight),
 	}
 }
 
@@ -44,7 +48,9 @@ func TestGenerated_RoundTrip(t *testing.T) {
 	in.SyncedAt = time.Now() // tagged map:"-", so it does not come back
 
 	w := mapper.EmployeeToWire(in)
-	if w.GetId() != "192.0.2.1" || w.GetName() != "Alice" || w.Login != "alice" || w.Revision != 0 {
+	if w.GetId() != "192.0.2.1" || w.GetName() != "Alice" || w.Login != "alice" || w.Revision != 0 ||
+		w.Status != wire.Status_STATUS_ON_LEAVE || w.Former == nil || *w.Former != wire.Status_STATUS_ACTIVE ||
+		w.Shift == nil || *w.Shift != "night" {
 		t.Errorf("EmployeeToWire() = %+v", w)
 	}
 
@@ -64,8 +70,14 @@ func TestGenerated_Nil(t *testing.T) {
 
 	w := mapper.EmployeeToWire(model.Employee{})
 	if w.Manager != nil || w.Offices != nil || w.ByRegion != nil || w.Note != nil || w.Contact.GetKind() != nil ||
-		w.Backup != nil || w.LeftAt != nil || w.Peers != nil || w.ReviewedAt != nil {
+		w.Backup != nil || w.LeftAt != nil || w.Peers != nil || w.ReviewedAt != nil || w.Former != nil ||
+		w.Shift != nil {
 		t.Errorf("EmployeeToWire(zero) = %+v, want nil fields and no contact arm", w)
+	}
+	// An enum's zero value, which stands for none, goes out as the unspecified
+	// value, and comes back as itself.
+	if w.Status != wire.Status_STATUS_UNSPECIFIED {
+		t.Errorf("EmployeeToWire(zero).Status = %v, want STATUS_UNSPECIFIED", w.Status)
 	}
 
 	got, err := mapper.EmployeeFromWire(nil)
@@ -113,6 +125,21 @@ func TestGenerated_Errors(t *testing.T) {
 			name: "a value its rule rejects, behind a pointer",
 			in:   &wire.Employee{Id: "192.0.2.1", ReviewedAt: &wire.Timestamp{}},
 			want: "map model.Employee.ReviewedAt: rule: reviewed_at",
+		},
+		{
+			name: "a value of an enum the domain does not have",
+			in:   &wire.Employee{Id: "192.0.2.1", Status: wire.Status_STATUS_RETIRED},
+			want: "map model.Employee.Status: model.Status has no value for STATUS_RETIRED",
+		},
+		{
+			name: "a number of an enum nobody declared",
+			in:   &wire.Employee{Id: "192.0.2.1", Former: new(wire.Status(9))},
+			want: "map model.Employee.Former: model.Status has no value for 9",
+		},
+		{
+			name: "a string none of the constants of an enum holds",
+			in:   &wire.Employee{Id: "192.0.2.1", Shift: new("evening")},
+			want: "map model.Employee.Shift: rule: inclusion",
 		},
 		{
 			name: "the manager",
