@@ -20,6 +20,9 @@ const mapperKey = "mapper"
 // fields of one function read.
 const mapKey = "map"
 
+// strictOption is the argument of //kanna:mapper strict.
+const strictOption = "strict"
+
 // shareKey spells the directive //kanna:share, which names the destination
 // fields whose slices and maps are handed on as they are rather than copied.
 const shareKey = "share"
@@ -43,12 +46,19 @@ type decl struct {
 	pos     token.Position
 	entries []entry
 
+	// strict reports whether the interface is marked //kanna:mapper strict: each
+	// destination field is filled only from a source named for it, by
+	// //kanna:map or a tag, never matched by its name alone.
+	strict bool
+
 	// share names the destination fields of //kanna:share, whose slices and
 	// maps are handed on as they are rather than copied. Only field is set.
 	share []entry
 }
 
-// entry is one Field=Source of a //kanna:map line.
+// entry is one Field=Source of a //kanna:map line, or Field alone, which
+// approves the source the field is matched to anyway, as a strict mapping
+// requires.
 type entry struct {
 	field, source string
 	pos           token.Position // the line
@@ -57,6 +67,11 @@ type entry struct {
 // excluded reports whether the entry is Field=-, which leaves the field zero.
 func (e entry) excluded() bool {
 	return e.source == "-"
+}
+
+// approves reports whether the entry is Field alone, which names no source.
+func (e entry) approves() bool {
+	return e.source == ""
 }
 
 // errorType is the predeclared error.
@@ -102,8 +117,10 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 	if !d.Found {
 		return nil, diags
 	}
-	if d.Args != "" {
-		diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s takes no arguments, got %q", mapperKey, d.Args))
+	strict := d.Args == strictOption
+	if d.Args != "" && !strict {
+		diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s takes no argument but %s, got %q", mapperKey, strictOption,
+			d.Args))
 	}
 	m, ds := directive.Find(pkg.Fset, doc, mapKey)
 	if diags = append(diags, ds...); m.Found {
@@ -139,6 +156,7 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 		dc, ds := declOf(pkg.Fset, fn, f.Doc)
 		diags = append(diags, ds...)
 		if !diag.HasErrors(ds) {
+			dc.strict = strict
 			found = append(found, dc)
 		}
 	}
@@ -283,19 +301,18 @@ func mapEntries(fset *token.FileSet, doc *ast.CommentGroup) ([]entry, []diag.Dia
 		return nil, diags
 	}
 	if d.Args == "" {
-		return nil, append(diags, diag.Errorf(d.Pos, "//kanna:%s needs at least one Field=Source or Field=-", mapKey))
+		return nil, append(diags, diag.Errorf(d.Pos, "//kanna:%s needs at least one Field, Field=Source, or Field=-",
+			mapKey))
 	}
 
 	var entries []entry
 	seen := make(map[string]bool)
 	for arg := range strings.FieldsSeq(d.Args) {
-		field, source, ok := strings.Cut(arg, "=")
+		field, source, hasSource := strings.Cut(arg, "=")
 		switch {
-		case !ok:
-			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not Field=Source or Field=-", mapKey, arg))
 		case !token.IsIdentifier(field):
 			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, field))
-		case source != "-" && !token.IsIdentifier(source):
+		case hasSource && source != "-" && !token.IsIdentifier(source):
 			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, source))
 		case seen[field]:
 			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %s appears twice", mapKey, field))

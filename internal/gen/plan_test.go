@@ -442,3 +442,63 @@ func TestUnexported(t *testing.T) {
 		}
 	}
 }
+
+// A strict mapping fills only the destination fields named for it, by
+// //kanna:map or a tag, and writes no function of its own for a pair of
+// structs, whose fields it would fill unnamed.
+func TestPlans_Strict(t *testing.T) {
+	t.Parallel()
+
+	const types = "type User struct {\n\tID, Name, Email, Token, Note string\n\tHome Address\n}\n" +
+		"type Address struct{ City string }\n" +
+		"type Public struct {\n\tID, Name string\n\tMail string `map:\"Email\"`\n\tNote string\n}\n" +
+		"type Mailed struct {\n\tID string\n\tAddress string\n}\n" +
+		"type Homed struct {\n\tID string\n\tHome PublicAddress\n}\n" +
+		"type PublicAddress struct{ City string }\n"
+
+	tests := []struct {
+		name, methods, want string
+	}{
+		{
+			name:    "every field named, by //kanna:map and a tag",
+			methods: "\t//kanna:map ID Name Note=-\n\tToPublic(User) Public\n",
+		},
+		{
+			name:    "a field matched by name alone",
+			methods: "\t//kanna:map ID Note=-\n\tToPublic(User) Public\n",
+			want: "test.go:30:2: error: ToPublic: test.Public.Name is not named; a strict mapping fills only the " +
+				"fields //kanna:map or a tag names\n  add Name to the //kanna:map of ToPublic, or Name=- to leave it zero",
+		},
+		{
+			name:    "a field named by the source's tag",
+			methods: "\t//kanna:map ID\n\tToMailed(Tagged) Mailed\n",
+		},
+		{
+			name:    "a pair of structs it would write a function for",
+			methods: "\t//kanna:map ID Home\n\tToHomed(User) Homed\n",
+			want: "test.go:30:2: error: ToHomed: Home: a strict mapping writes no function of its own for test.Address " +
+				"to test.PublicAddress, whose fields it would fill unnamed\n" +
+				"  declare AddressToPublicAddress(test.Address) test.PublicAddress in the interface, and name its fields",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "package test\n\n" + types +
+				"type Tagged struct {\n\tID string\n\tEmail string `map:\"Address\"`\n}\n\n" +
+				"//kanna:mapper strict\ntype _ interface {\n" + tt.methods + "}\n"
+			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": src}))
+			if tt.want == "" {
+				if len(diags) > 0 {
+					t.Errorf("diagnostics = %q, want none", diags)
+				}
+				return
+			}
+			if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.want) }) {
+				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
+			}
+		})
+	}
+}
