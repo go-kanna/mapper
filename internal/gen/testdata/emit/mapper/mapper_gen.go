@@ -64,7 +64,7 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		v21 := string(*v20)
 		v19 = &v21
 	}
-	return &wire.Employee{
+	dst := &wire.Employee{
 		Id:         src.ID.String(),
 		Name:       src.FullName,
 		Login:      string(src.Login),
@@ -86,6 +86,13 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		Tags:       slices.Clone(src.Tags),
 		Photo:      src.Photo,
 	}
+	switch v22 := src.Payment.(type) {
+	case model.Bank:
+		dst.Payment = &wire.Employee_Bank{Bank: bankToWire(v22)}
+	case model.Cash:
+		dst.Payment = &wire.Employee_Cash{Cash: cashToWire(v22)}
+	}
+	return dst
 }
 
 // EmployeeFromWire maps *wire.Employee to model.Employee.
@@ -175,7 +182,7 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		}
 		v26 = &v28
 	}
-	return model.Employee{
+	dst := model.Employee{
 		ID:         v,
 		FullName:   e.GetName(),
 		Login:      model.Login(e.Login),
@@ -196,7 +203,14 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		Shift:      v26,
 		Tags:       slices.Clone(e.Tags),
 		Photo:      e.Photo,
-	}, nil
+	}
+	switch v29 := e.GetPayment().(type) {
+	case *wire.Employee_Bank:
+		dst.Payment = bankToModel(v29.Bank)
+	case *wire.Employee_Cash:
+		dst.Payment = cashToModel(v29.Cash)
+	}
+	return dst, nil
 }
 
 // addressToWire maps model.Address to *wire.Address.
@@ -226,6 +240,20 @@ func statusToWire(src model.Status) wire.Status {
 		return wire.Status_STATUS_ON_LEAVE
 	}
 	return wire.Status_STATUS_UNSPECIFIED
+}
+
+// bankToWire maps model.Bank to *wire.Bank.
+func bankToWire(src model.Bank) *wire.Bank {
+	return &wire.Bank{
+		Account: src.Account,
+	}
+}
+
+// cashToWire maps model.Cash to *wire.Cash.
+func cashToWire(src model.Cash) *wire.Cash {
+	return &wire.Cash{
+		Office: src.Office,
+	}
 }
 
 // addressToModel maps *wire.Address to model.Address.
@@ -268,4 +296,24 @@ func statusToModel(src wire.Status) (model.Status, error) {
 		return model.StatusOnLeave, nil
 	}
 	return "", fmt.Errorf("model.Status has no value for %v", src)
+}
+
+// bankToModel maps *wire.Bank to model.Bank.
+func bankToModel(src *wire.Bank) model.Bank {
+	if src == nil {
+		return model.Bank{}
+	}
+	return model.Bank{
+		Account: src.Account,
+	}
+}
+
+// cashToModel maps *wire.Cash to model.Cash.
+func cashToModel(src *wire.Cash) model.Cash {
+	if src == nil {
+		return model.Cash{}
+	}
+	return model.Cash{
+		Office: src.Office,
+	}
 }

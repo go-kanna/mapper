@@ -90,6 +90,8 @@ type Employee struct {
 	Tags  []string
 	Photo []byte `map:",share"`
 
+	Payment Payment
+
 	// SyncedAt never crosses the wire.
 	SyncedAt time.Time `map:"-"`
 }
@@ -105,3 +107,16 @@ type Contact struct {
 	Email  *string
 	Postal *Address
 }
+
+// Payment is how an employee is paid, one way only: a sum type, whose variants
+// map to the arms of the wire's oneof that are named as they are.
+type Payment interface{ isPayment() }
+
+// Bank pays into an account.
+type Bank struct{ Account string }
+
+// Cash pays by hand, at an office.
+type Cash struct{ Office string }
+
+func (Bank) isPayment() {}
+func (Cash) isPayment() {}

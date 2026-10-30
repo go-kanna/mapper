@@ -75,7 +75,7 @@ func (e *emitter) function() {
 
 	// A oneof is set after the literal, so a function with one builds its
 	// result in a variable; any other returns the literal itself.
-	oneofs := len(e.pl.dstOneofs) > 0 || len(e.pl.srcOneofs) > 0
+	oneofs := len(e.pl.dstOneofs) > 0 || len(e.pl.srcOneofs) > 0 || len(e.pl.sums) > 0
 	dst := ""
 	if oneofs {
 		dst = e.s.Name("dst")
@@ -97,7 +97,29 @@ func (e *emitter) function() {
 	for _, o := range e.pl.srcOneofs {
 		e.srcOneof(dst, o)
 	}
+	for _, s := range e.pl.sums {
+		e.sum(dst, s)
+	}
 	fmt.Fprintf(&e.b, "return %s\n}\n", e.ret(dst))
+}
+
+// sum writes the type switch that fills the field s of dst with the case of the
+// sum type or the oneof its source holds, leaving it nil when it holds none.
+func (e *emitter) sum(dst string, s sumPlan) {
+	v := e.s.Name("v")
+	fmt.Fprintf(&e.b, "switch %s := %s.(type) {\n", v, e.read(s.read))
+	for _, c := range s.cases {
+		target := dst + "." + s.dst.Name()
+		if s.out {
+			fmt.Fprintf(&e.b, "case %s:\n", e.typ(c.variant))
+			x := e.value(c.op, v, c.arm.field.Type(), s.dst.Name())
+			fmt.Fprintf(&e.b, "%s = &%s{%s: %s}\n", target, e.typ(c.arm.wrapper), c.arm.field.Name(), x)
+			continue
+		}
+		fmt.Fprintf(&e.b, "case *%s:\n", e.typ(c.arm.wrapper))
+		e.assign(target, c.op, v+"."+c.arm.field.Name(), c.variant, s.dst.Name())
+	}
+	e.b.WriteString("}\n")
 }
 
 // enumFunction writes a function written for a pair of enums: a switch over

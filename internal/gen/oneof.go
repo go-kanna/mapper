@@ -41,7 +41,10 @@ func oneofArms(t types.Type) []oneofArm {
 			continue
 		}
 		st, ok := wrapper.Underlying().(*types.Struct)
-		if !ok || st.NumFields() != 1 || !st.Field(0).Exported() || !types.Implements(types.NewPointer(wrapper), iface) {
+		// A type implementing the interface by value is a variant of a sum type
+		// of the domain rather than a wrapper.
+		if !ok || st.NumFields() != 1 || !st.Field(0).Exported() || !types.Implements(types.NewPointer(wrapper), iface) ||
+			types.Implements(wrapper, iface) {
 			continue
 		}
 		arms = append(arms, oneofArm{wrapper: wrapper, field: st.Field(0)})

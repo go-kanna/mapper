@@ -101,7 +101,10 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 
 		// An interface the source carries too is copied as it is, rather than
 		// taken apart as a oneof.
-		if arms := oneofArms(f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) {
+		if arms := oneofArms(f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) &&
+			!slices.ContainsFunc(sources, func(sf sourceField) bool {
+				return sf.via == nil && (sf.v.Name() == f.Name() || sf.tag == f.Name()) && len(sumVariants(sf.v.Type())) > 0
+			}) {
 			if o, ok := m.dstOneof(f, arms, sources, byField, srcStruct); ok {
 				o.named = hasEntry
 				out.oneofs = append(out.oneofs, o)

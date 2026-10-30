@@ -281,6 +281,32 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"  declare it as F(test.D) (test.S, error)",
 		},
 		{
+			name: "a variant of a sum type with no arm in the oneof",
+			src: "type Payment interface{ isPayment() }\n" +
+				"type Bank struct{ Account string }\ntype Card struct{ Number string }\n" +
+				"func (Bank) isPayment() {}\nfunc (Card) isPayment() {}\ntype S struct{ Payment Payment }\n" +
+				"type BankPB struct{ Account string }\ntype CashPB struct{ Office string }\n" +
+				"type isD_Payment interface{ isD_Payment() }\ntype D_Bank struct{ Bank *BankPB }\n" +
+				"type D_Cash struct{ Cash *CashPB }\nfunc (*D_Bank) isD_Payment() {}\nfunc (*D_Cash) isD_Payment() {}\n" +
+				"type D struct{ Payment isD_Payment }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "error: F: Payment: test.Card has no arm in test.isD_Payment\n" +
+				"  add an arm named Card to the oneof, or holding a message of that name",
+		},
+		{
+			name: "an arm of a oneof with no variant in the sum type",
+			src: "type Payment interface{ isPayment() }\n" +
+				"type Bank struct{ Account string }\ntype Card struct{ Number string }\n" +
+				"func (Bank) isPayment() {}\nfunc (Card) isPayment() {}\ntype S struct{ Payment Payment }\n" +
+				"type BankPB struct{ Account string }\ntype CashPB struct{ Office string }\n" +
+				"type isD_Payment interface{ isD_Payment() }\ntype D_Bank struct{ Bank *BankPB }\n" +
+				"type D_Cash struct{ Cash *CashPB }\nfunc (*D_Bank) isD_Payment() {}\nfunc (*D_Cash) isD_Payment() {}\n" +
+				"type D struct{ Payment isD_Payment }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tG(D) (S, error)\n}\n",
+			want: "error: G: Payment: test.D_Cash.Cash (arm of Payment) has no variant in test.Payment\n" +
+				"  declare a variant named Cash, or map the field with a function of your own",
+		},
+		{
 			name: "a field to share that the destination lacks",
 			src: "type S struct{ Data []byte }\ntype D struct{ Data []byte }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\t//kanna:share Dat\n\tF(S) D\n}\n",

@@ -41,6 +41,39 @@ func employee() model.Employee {
 
 		Tags:  []string{"go"},
 		Photo: []byte{0xff, 0xd8},
+
+		Payment: model.Bank{Account: "0001"},
+	}
+}
+
+// A sum type goes out as the arm of the oneof its variant is named after, and
+// comes back as that variant; none set is nil either way.
+func TestGenerated_SumType(t *testing.T) {
+	t.Parallel()
+
+	for _, p := range []model.Payment{model.Bank{Account: "0001"}, model.Cash{Office: "Osaka"}, nil} {
+		in := employee()
+		in.Payment = p
+		w := mapper.EmployeeToWire(in)
+		switch arm := w.GetPayment().(type) {
+		case *wire.Employee_Bank:
+			if b, ok := p.(model.Bank); !ok || arm.Bank.Account != b.Account {
+				t.Errorf("EmployeeToWire(%#v).Payment = %#v", p, arm)
+			}
+		case *wire.Employee_Cash:
+			if c, ok := p.(model.Cash); !ok || arm.Cash.Office != c.Office {
+				t.Errorf("EmployeeToWire(%#v).Payment = %#v", p, arm)
+			}
+		case nil:
+			if p != nil {
+				t.Errorf("EmployeeToWire(%#v).Payment = nil", p)
+			}
+		}
+
+		got, err := mapper.EmployeeFromWire(w)
+		if err != nil || got.Payment != p {
+			t.Errorf("EmployeeFromWire().Payment = %#v, %v; want %#v", got.Payment, err, p)
+		}
 	}
 }
 
