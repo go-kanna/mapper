@@ -496,6 +496,42 @@ The domain field has to be a pointer, slice, or map, because that is what says w
 domain field is an error like any other destination field: leave it out with `//kanna:map Membership=-`, or the whole
 oneof with `//kanna:map Kind=-`.
 
+### Sum types
+
+Pointer fields cannot keep the domain from setting two arms at once, and going out, the first one set wins without a
+word. A domain that wants one and only one by its types holds a sum type instead: an interface with an unexported
+method, which no other package can implement, and the exported types of its package that implement it by value:
+
+```go
+type Payment interface{ isPayment() }
+
+type Bank struct{ Account string }
+type Cash struct{ Office string }
+
+func (Bank) isPayment() {}
+func (Cash) isPayment() {}
+
+type Employee struct {
+	Payment Payment // wire: oneof payment { Bank bank = 1; Cash cash = 2; }
+}
+```
+
+A field of a sum type maps to a oneof field of the same name, each variant to the arm whose field, or the message it
+holds, is named as the variant is, regardless of case and underscores. The value converts as any other would, here
+through functions written for `Bank` and `Cash`:
+
+```go
+switch v := src.Payment.(type) {
+case model.Bank:
+	dst.Payment = &employeev1.Employee_Bank{Bank: bankToEmployeev1(v)}
+case model.Cash:
+	dst.Payment = &employeev1.Employee_Cash{Cash: cashToEmployeev1(v)}
+}
+```
+
+Coming back, a type switch on the oneof sets the variant of the arm that is there. A nil sum type and a oneof with no
+arm set are each other. A variant with no arm stops generation going out, as an arm with no variant does coming back.
+
 Types generated with protobuf's Opaque API, which have no exported fields, are not supported.
 
 ## Flags

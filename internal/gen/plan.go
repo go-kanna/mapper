@@ -23,6 +23,7 @@ type plan struct {
 	fields    []fieldPlan
 	dstOneofs []dstOneofPlan
 	srcOneofs []srcOneofPlan
+	sums      []sumPlan
 
 	// enum is the body of a function written for a pair of enums instead, or
 	// nil.
@@ -124,6 +125,10 @@ func (p *planner) plan(f *function, at site, param string, entries []entry) {
 		p.field = pair.dst.Name()
 		if pair.src.via != nil {
 			p.planSrcArm(pl, f, at, pair)
+			continue
+		}
+		if sp, ok := p.planSum(f, at, pair); ok {
+			pl.sums = append(pl.sums, sp)
 			continue
 		}
 		share := slices.Contains(shared, pair.dst.Name()) || sharedByTag(f.dst, pair.dst) || sharedByTag(f.src, pair.src.v)
@@ -423,6 +428,13 @@ func (pl *plan) cause() (string, op) {
 		for _, a := range o.arms {
 			if a.op.fallible() {
 				return a.dst.Name(), a.op
+			}
+		}
+	}
+	for _, s := range pl.sums {
+		for _, c := range s.cases {
+			if c.op.fallible() {
+				return s.dst.Name(), c.op
 			}
 		}
 	}

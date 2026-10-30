@@ -83,6 +83,41 @@ type Employee struct {
 
 	Tags  []string
 	Photo []byte
+
+	Payment isEmployee_Payment
+}
+
+func (x *Employee) GetPayment() isEmployee_Payment {
+	if x != nil {
+		return x.Payment
+	}
+	return nil
+}
+
+type isEmployee_Payment interface {
+	isEmployee_Payment()
+}
+
+type Employee_Bank struct {
+	Bank *Bank
+}
+
+type Employee_Cash struct {
+	Cash *Cash
+}
+
+func (*Employee_Bank) isEmployee_Payment() {}
+
+func (*Employee_Cash) isEmployee_Payment() {}
+
+type Bank struct {
+	state   int
+	Account string
+}
+
+type Cash struct {
+	state  int
+	Office string
 }
 
 // GetBackup reads a proto3 optional field: nil becomes "".
