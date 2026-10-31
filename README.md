@@ -11,7 +11,7 @@ kanna-mapper writes the functions between your domain types and the wire types y
 signatures; it writes the bodies, field by field, calling the conversions you list for the types Go cannot convert on
 its own.
 
-Part of the [kanna](https://github.com/go-kanna/kanna) family of code generators. Requires Go 1.26.
+Part of the [kanna](https://go-kanna.github.io/) family of code generators. Requires Go 1.26.
 
 ## Install
 
