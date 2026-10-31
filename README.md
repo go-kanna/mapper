@@ -482,8 +482,8 @@ type Change struct { // wire, as protoc-gen-go wrote it
 ```
 
 Each arm is matched to a domain field by the name of its wrapper's field, with the rules above, and converted the way
-that field would be. Going out, the first set field in the oneof's declaration order fills the arm; none set leaves
-the oneof nil. Coming back, a type switch on the oneof fills the field for the arm that is there:
+that field would be. Coming back, a type switch on the oneof fills the field for the arm that is there. Going out, the
+first set field in the oneof's declaration order fills the arm; none set leaves the oneof nil:
 
 ```go
 if v := src.Membership; v != nil {
