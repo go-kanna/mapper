@@ -89,8 +89,16 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 	switch v22 := src.Payment.(type) {
 	case model.Bank:
 		dst.Payment = &wire.Employee_Bank{Bank: bankToWire(v22)}
+	case *model.Bank:
+		if v22 != nil {
+			dst.Payment = &wire.Employee_Bank{Bank: bankToWire(*v22)}
+		}
 	case model.Cash:
 		dst.Payment = &wire.Employee_Cash{Cash: cashToWire(v22)}
+	case *model.Cash:
+		if v22 != nil {
+			dst.Payment = &wire.Employee_Cash{Cash: cashToWire(*v22)}
+		}
 	}
 	return dst
 }

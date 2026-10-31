@@ -431,12 +431,20 @@ type Employee struct {
 switch v := src.Payment.(type) {
 case model.Bank:
 	dst.Payment = &employeev1.Employee_Bank{Bank: bankToEmployeev1(v)}
+case *model.Bank:
+	if v != nil {
+		dst.Payment = &employeev1.Employee_Bank{Bank: bankToEmployeev1(*v)}
+	}
 case model.Cash:
 	dst.Payment = &employeev1.Employee_Cash{Cash: cashToEmployeev1(v)}
+case *model.Cash:
+	if v != nil {
+		dst.Payment = &employeev1.Employee_Cash{Cash: cashToEmployeev1(*v)}
+	}
 }
 ```
 
-ドメインに戻ってくる方向では、oneof に対する型 switch が、そこにあるアームのバリアントを設定します。nil の直和型と、どのアームも設定されていない oneof は、互いに対応します。アームのないバリアントはドメインから出ていく方向で、バリアントのないアームはドメインに戻ってくる方向で、生成を止めます。
+バリアントは値でインターフェースを実装するので、そのポインタも実装します。ポインタはドメインから出ていく方向でバリアントと同じように扱われ、nil のポインタは何も設定しません。ドメインに戻ってくる方向では、oneof に対する型 switch が、そこにあるアームのバリアントを値で設定します。nil の直和型と、どのアームも設定されていない oneof は、互いに対応します。アームのないバリアントはドメインから出ていく方向で、バリアントのないアームはドメインに戻ってくる方向で、生成を止めます。
 
 protobuf の Opaque API で生成された型は、公開フィールドを持たないため、サポートしていません。
 

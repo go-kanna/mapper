@@ -526,13 +526,23 @@ through functions written for `Bank` and `Cash`:
 switch v := src.Payment.(type) {
 case model.Bank:
 	dst.Payment = &employeev1.Employee_Bank{Bank: bankToEmployeev1(v)}
+case *model.Bank:
+	if v != nil {
+		dst.Payment = &employeev1.Employee_Bank{Bank: bankToEmployeev1(*v)}
+	}
 case model.Cash:
 	dst.Payment = &employeev1.Employee_Cash{Cash: cashToEmployeev1(v)}
+case *model.Cash:
+	if v != nil {
+		dst.Payment = &employeev1.Employee_Cash{Cash: cashToEmployeev1(*v)}
+	}
 }
 ```
 
-Coming back, a type switch on the oneof sets the variant of the arm that is there. A nil sum type and a oneof with no
-arm set are each other. A variant with no arm stops generation going out, as an arm with no variant does coming back.
+A variant implements the sum type by value, so a pointer to it does too: it goes out as the variant would, and a nil one
+as none. Coming back, a type switch on the oneof sets the variant of the arm that is there, by value. A nil sum type and
+a oneof with no arm set are each other. A variant with no arm stops generation going out, as an arm with no variant does
+coming back.
 
 Types generated with protobuf's Opaque API, which have no exported fields, are not supported.
 

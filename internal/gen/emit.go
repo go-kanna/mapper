@@ -104,7 +104,9 @@ func (e *emitter) function() {
 }
 
 // sum writes the type switch that fills the field s of dst with the case of the
-// sum type or the oneof its source holds, leaving it nil when it holds none.
+// sum type or the oneof its source holds, leaving it nil when it holds none. A
+// pointer to a variant implements the sum type too, so it goes out as the variant
+// would, and a nil one as none.
 func (e *emitter) sum(dst string, s sumPlan) {
 	v := e.s.Name("v")
 	fmt.Fprintf(&e.b, "switch %s := %s.(type) {\n", v, e.read(s.read))
@@ -112,14 +114,22 @@ func (e *emitter) sum(dst string, s sumPlan) {
 		target := dst + "." + s.dst.Name()
 		if s.out {
 			fmt.Fprintf(&e.b, "case %s:\n", e.typ(c.variant))
-			x := e.value(c.op, v, c.arm.field.Type(), s.dst.Name())
-			fmt.Fprintf(&e.b, "%s = &%s{%s: %s}\n", target, e.typ(c.arm.wrapper), c.arm.field.Name(), x)
+			e.sumArm(target, c, v, s.dst.Name())
+			fmt.Fprintf(&e.b, "case *%s:\nif %s != nil {\n", e.typ(c.variant), v)
+			e.sumArm(target, c, "*"+v, s.dst.Name())
+			e.b.WriteString("}\n")
 			continue
 		}
 		fmt.Fprintf(&e.b, "case *%s:\n", e.typ(c.arm.wrapper))
 		e.assign(target, c.op, v+"."+c.arm.field.Name(), c.variant, s.dst.Name())
 	}
 	e.b.WriteString("}\n")
+}
+
+// sumArm sets target to the arm of c holding val, a value of its variant.
+func (e *emitter) sumArm(target string, c sumCase, val, field string) {
+	x := e.value(c.op, val, c.arm.field.Type(), field)
+	fmt.Fprintf(&e.b, "%s = &%s{%s: %s}\n", target, e.typ(c.arm.wrapper), c.arm.field.Name(), x)
 }
 
 // enumFunction writes a function written for a pair of enums: a switch over
