@@ -5,6 +5,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-kanna/mapper.svg)](https://pkg.go.dev/github.com/go-kanna/mapper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/go-kanna/mapper?label=release&sort=semver)](https://github.com/go-kanna/mapper/tags)
+[![日本語](https://img.shields.io/badge/lang-%E6%97%A5%E6%9C%AC%E8%AA%9E-blue.svg)](README.ja.md)
 
 kanna-mapper writes the functions between your domain types and the wire types you do not control. You declare their
 signatures; it writes the bodies, field by field, calling the conversions you list for the types Go cannot convert on
