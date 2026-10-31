@@ -77,6 +77,23 @@ func TestGenerated_SumType(t *testing.T) {
 	}
 }
 
+// A pointer to a variant implements the sum type too, as the variant does so by
+// value, so it goes out as the variant would, and a nil one as none.
+func TestGenerated_SumTypePointer(t *testing.T) {
+	t.Parallel()
+
+	in := employee()
+	in.Payment = &model.Bank{Account: "0001"}
+	if arm, ok := mapper.EmployeeToWire(in).GetPayment().(*wire.Employee_Bank); !ok || arm.Bank.Account != "0001" {
+		t.Errorf("EmployeeToWire(%#v).Payment = %#v", in.Payment, mapper.EmployeeToWire(in).GetPayment())
+	}
+
+	in.Payment = (*model.Cash)(nil)
+	if got := mapper.EmployeeToWire(in).GetPayment(); got != nil {
+		t.Errorf("EmployeeToWire(%#v).Payment = %#v, want nil", in.Payment, got)
+	}
+}
+
 // A slice of the same type is copied, unless the field is to be shared: changing
 // what one side holds then changes the other's, in either direction.
 func TestGenerated_Copies(t *testing.T) {

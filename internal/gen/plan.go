@@ -307,19 +307,31 @@ func (p *planner) find(src, dst types.Type) (*function, bool) {
 	if i < 0 {
 		return nil, false
 	}
-	return p.funcs[i], true
+	f := p.funcs[i]
+	if f.decl == nil {
+		p.checkWritten(src, dst)
+	}
+	return f, true
+}
+
+// checkWritten reports a strict function calling a function written for src and
+// dst, whichever mapping wrote it first, as that function fills its fields
+// unnamed. An enum's has no fields.
+func (p *planner) checkWritten(src, dst types.Type) {
+	if !p.strict || enumPair(src, dst) {
+		return
+	}
+	p.diags = append(p.diags, diag.Errorf(p.at.pos,
+		"%s: %s: a strict mapping calls no function written for %s to %s, whose fields it would fill unnamed",
+		p.at.path, p.field, typeLabel(src), typeLabel(dst)).
+		WithHints(fmt.Sprintf("declare %s(%s) %s in the interface, and name its fields",
+			exported(helperName(src, dst)), typeLabel(src), typeLabel(dst))))
 }
 
 // write makes the function for the pair of structs or of enums src and dst, to
 // be planned after the one being planned now.
 func (p *planner) write(src, dst types.Type) *function {
-	if p.strict && !enumPair(src, dst) {
-		p.diags = append(p.diags, diag.Errorf(p.at.pos,
-			"%s: %s: a strict mapping writes no function of its own for %s to %s, whose fields it would fill unnamed",
-			p.at.path, p.field, typeLabel(src), typeLabel(dst)).
-			WithHints(fmt.Sprintf("declare %s(%s) %s in the interface, and name its fields",
-				exported(helperName(src, dst)), typeLabel(src), typeLabel(dst))))
-	}
+	p.checkWritten(src, dst)
 	f := &function{name: p.name(helperName(src, dst)), src: src, dst: dst}
 	p.funcs = append(p.funcs, f)
 	p.queue = append(p.queue, f)
