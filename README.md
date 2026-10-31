@@ -289,8 +289,9 @@ type _ interface {
 }
 ```
 
-A field matched by its name alone stops generation, and so does a pair of structs a strict function would write a
-function of its own for, as it would fill that one's fields unnamed; declare it in the interface, and name its fields:
+A field matched by its name alone stops generation, and so does a pair of structs a strict function would call a
+written function for, whichever mapping wrote it, as that function fills its fields unnamed; declare it in the
+interface, and name its fields:
 
 ```console
 ./mapper.go:15:2: error: UserToPublic: api.User.RecoveryToken is not named; a strict mapping fills only the fields //kanna:map or a tag names

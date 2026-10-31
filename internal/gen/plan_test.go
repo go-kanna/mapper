@@ -502,7 +502,7 @@ func TestPlans_Strict(t *testing.T) {
 		{
 			name:    "a pair of structs it would write a function for",
 			methods: "\t//kanna:map ID Home\n\tToHomed(User) Homed\n",
-			want: "test.go:30:2: error: ToHomed: Home: a strict mapping writes no function of its own for test.Address " +
+			want: "test.go:30:2: error: ToHomed: Home: a strict mapping calls no function written for test.Address " +
 				"to test.PublicAddress, whose fields it would fill unnamed\n" +
 				"  declare AddressToPublicAddress(test.Address) test.PublicAddress in the interface, and name its fields",
 		},
@@ -515,6 +515,101 @@ func TestPlans_Strict(t *testing.T) {
 			src := "package test\n\n" + types +
 				"type Tagged struct {\n\tID string\n\tEmail string `map:\"Address\"`\n}\n\n" +
 				"//kanna:mapper strict\ntype _ interface {\n" + tt.methods + "}\n"
+			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": src}))
+			if tt.want == "" {
+				if len(diags) > 0 {
+					t.Errorf("diagnostics = %q, want none", diags)
+				}
+				return
+			}
+			if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.want) }) {
+				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
+			}
+		})
+	}
+}
+
+// A strict mapping calls no function written for a pair of structs, whichever
+// mapping wrote it, so that another mapping of the pair, declared before it or
+// after it, does not change what it fills. A function declared for the pair, or
+// a conversion listed for it, it calls.
+func TestPlans_StrictWrittenFunctions(t *testing.T) {
+	t.Parallel()
+
+	const types = "type ChildIn struct{ Name, Secret string }\n" +
+		"type ChildOut struct{ Name, Secret string }\n" +
+		"type In struct{ Child ChildIn }\n" +
+		"type Out struct{ Child ChildOut }\n" +
+		"type InSlice struct{ Child []ChildIn }\n" +
+		"type OutSlice struct{ Child []ChildOut }\n" +
+		"type InMap struct{ Child map[string]ChildIn }\n" +
+		"type OutMap struct{ Child map[string]ChildOut }\n" +
+		"type InPointer struct{ Child *ChildIn }\n" +
+		"type OutPointer struct{ Child *ChildOut }\n" +
+		"func convertChild(ChildIn) ChildOut { return ChildOut{} }\n" +
+		"type Status string\n" +
+		"const StatusOn Status = \"on\"\n" +
+		"type WireStatus int32\n" +
+		"const (\n\tWireStatus_WIRE_STATUS_UNSPECIFIED WireStatus = 0\n\tWireStatus_WIRE_STATUS_ON WireStatus = 1\n)\n" +
+		"func (x WireStatus) Enum() *WireStatus { return &x }\n" +
+		"type InEnum struct{ Status Status }\n" +
+		"type OutEnum struct{ Status WireStatus }\n\n"
+	const (
+		loose  = "//kanna:mapper\ntype _ interface{ Loose(In) Out }\n"
+		strict = "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n\tStrict(In) Out\n}\n"
+		refuse = "Strict: Child: a strict mapping calls no function written for test.ChildIn to test.ChildOut, " +
+			"whose fields it would fill unnamed\n" +
+			"  declare ChildInToChildOut(test.ChildIn) test.ChildOut in the interface, and name its fields"
+	)
+
+	tests := []struct {
+		name, decls, want string
+	}{
+		{name: "written for a mapping before it", decls: loose + strict, want: refuse},
+		{name: "written for a mapping after it", decls: strict + loose, want: refuse},
+		{
+			name: "in a slice",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
+				"\tStrict(InSlice) OutSlice\n}\n",
+			want: refuse,
+		},
+		{
+			name: "in a map",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
+				"\tStrict(InMap) OutMap\n}\n",
+			want: refuse,
+		},
+		{
+			name: "through pointers",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
+				"\tStrict(InPointer) OutPointer\n}\n",
+			want: refuse,
+		},
+		{
+			name: "declared by the strict interface",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n\tStrict(In) Out\n" +
+				"\t//kanna:map Name Secret=-\n\tChildInToChildOut(ChildIn) ChildOut\n}\n",
+		},
+		{
+			name:  "declared by another interface",
+			decls: "//kanna:mapper\ntype _ interface{ ChildInToChildOut(ChildIn) ChildOut }\n" + strict,
+		},
+		{
+			name:  "a listed conversion",
+			decls: "//kanna:converter\nvar _ = []any{convertChild}\n\n" + loose + strict,
+		},
+		{
+			name: "an enum's, which has no fields",
+			decls: "//kanna:mapper\ntype _ interface{ Loose(InEnum) OutEnum }\n" +
+				"//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Status\n\tStrict(InEnum) OutEnum\n}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "package test\n\n" + types + tt.decls
 			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": src}))
 			if tt.want == "" {
 				if len(diags) > 0 {

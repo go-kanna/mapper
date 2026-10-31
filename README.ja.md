@@ -239,7 +239,7 @@ type _ interface {
 }
 ```
 
-名前だけで一致したフィールドは生成を止めます。strict な関数が専用の関数を生成することになる構造体の組も同様です。その関数のフィールドを名指しなしで埋めることになるからです。その組をインターフェースで宣言し、フィールドを名指ししてください:
+名前だけで一致したフィールドは生成を止めます。strict な関数が、生成された関数を呼ぶことになる構造体の組も同様です。どのマッピングのために生成された関数でも同じです。その関数はフィールドを名指しなしで埋めるからです。その組をインターフェースで宣言し、フィールドを名指ししてください:
 
 ```console
 ./mapper.go:15:2: error: UserToPublic: api.User.RecoveryToken is not named; a strict mapping fills only the fields //kanna:map or a tag names
