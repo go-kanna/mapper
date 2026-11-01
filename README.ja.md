@@ -130,7 +130,7 @@ $ go generate ./...
 `//kanna:mapper` を付けたインターフェースの各メソッドは、kanna-mapper が生成する関数で、名前とシグネチャはそこに書いたとおりになります:
 
 - パラメータは変換元の 1 つで、戻り値は変換先か `(destination, error)`
-- 変換元と変換先は構造体型かそのポインタで、ジェネリックではない
+- 変換元と変換先は構造体型かそのポインタで、ジェネリックではない。または [kanna-value の enum と protobuf の enum](#enum) の組
 - パラメータに名前があればその名前を、なければ `src` を使う
 - メソッドの doc コメントが、`//kanna:` の行を除いて関数の doc コメントになる。doc コメントがなければ、関数には上の例のような文が付く
 - 非公開の名前のメソッドからは非公開の関数が生成される。パッケージがすでに宣言している名前はエラーになる
@@ -356,8 +356,6 @@ func orderStatusToOrderv1(src model.OrderStatus) orderv1.OrderStatus {
 // orderStatusToModel maps orderv1.OrderStatus to model.OrderStatus.
 func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 	switch src {
-	case orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED:
-		return "", nil
 	case orderv1.OrderStatus_ORDER_STATUS_PLACED:
 		return model.OrderStatusPlaced, nil
 	case orderv1.OrderStatus_ORDER_STATUS_PAID:
@@ -367,12 +365,28 @@ func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 }
 ```
 
-protobuf の 0 とドメインの空文字列はどちらも値がないことを表し、相互にマッピングされます。ただし、0 の値に名前で一致する定数がある場合は除きます。protobuf にあってドメインにない値や、誰も宣言していない数値は、ドメインに戻ってくる方向でエラーになります。そのため、protobuf から enum をマッピングする関数はエラーを返さなければなりません。一方、ドメインにあって protobuf にない定数は、生成を止めます:
+protobuf にあってドメインにない値や、誰も宣言していない数値は、ドメインに戻ってくる方向でエラーになります。そのため、protobuf から enum をマッピングする関数はエラーを返さなければなりません。protobuf の 0 もこれに含まれます。ただし、0 の値に名前で一致する定数がある場合は除きます。protobuf へ向かう方向では、どの定数でもない値は、空文字列も含めて protobuf の 0 になります。一方、ドメインにあって protobuf にない定数は、生成を止めます:
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
   add ORDER_STATUS_REFUNDED to it, or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
 ```
+
+どちらの関数も、`//kanna:mapper` インターフェースに宣言すれば、書いた名前とシグネチャで自分で呼び出せます。宣言した関数は、上で生成される関数の代わりに、その組のすべてのフィールドで使われます:
+
+```go
+//kanna:mapper
+type _ interface {
+	OrderStatusToProto(model.OrderStatus) (orderv1.OrderStatus, error)
+
+	//kanna:allow unspecified
+	orderStatusToModel(orderv1.OrderStatus) (model.OrderStatus, error)
+}
+```
+
+protobuf へ向かう方向でエラーを宣言すると、どの定数でもない値も、protobuf の 0 ではなくエラーになります。
+
+`//kanna:allow unspecified` を付けると、protobuf の 0 はエラーではなくドメインの空文字列になります。省略できる値や、`required` ルールでリクエストの他のルールと一緒に報告したい値に使います。この例のように非公開のメソッドにすれば、パッケージの API は増えません。protobuf の enum から変換する関数以外に付けると、生成が止まります。
 
 メッセージが `string` として持つフィールドのような普通の文字列は、コンストラクタ `NewOrderStatus` を通じて kanna-value の enum になります。このコンストラクタは、どの定数でもない文字列を、空文字列も含めて拒否します。省略可能なフィールドはポインタにマッピングしてください。逆方向では、enum はすでに文字列なので、そのまま変換されます。
 

@@ -347,7 +347,8 @@ func TestPlans_Diagnostics(t *testing.T) {
 
 // The constants of an enum of kanna-value and of protobuf are matched by their
 // names, past the names of their types. A value in neither direction's cases
-// becomes the unspecified value going out and an error coming back.
+// becomes the unspecified value going out and an error coming back, the
+// unspecified value itself included.
 func TestPlans_Enums(t *testing.T) {
 	t.Parallel()
 
@@ -396,7 +397,6 @@ type _ interface {
 			"  OrderStatusSettled -> Order_SETTLED\n" +
 			"  else -> Order_STATUS_UNSPECIFIED",
 		"order_StatusToOrderStatus(src test.Order_Status) test.OrderStatus (fallible)\n" +
-			`  Order_STATUS_UNSPECIFIED -> ""` + "\n" +
 			"  Order_STATUS_PLACED -> OrderStatusPlaced\n" +
 			"  Order_STATUS_ON_HOLD -> OrderStatusOnHold\n" +
 			"  Order_SETTLED -> OrderStatusSettled",
@@ -406,6 +406,127 @@ type _ interface {
 	}
 	if len(diags) > 0 {
 		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
+// enumsSrc is an enum of kanna-value and one of protobuf, and a struct holding
+// each.
+const enumsSrc = `package test
+
+type Status string
+
+const StatusOn Status = "on"
+
+type WireStatus int32
+
+const (
+	WireStatus_WIRE_STATUS_UNSPECIFIED WireStatus = 0
+	WireStatus_WIRE_STATUS_ON          WireStatus = 1
+)
+
+func (x WireStatus) Enum() *WireStatus { return &x }
+
+type Order struct{ Status Status }
+
+type OrderPB struct{ Status WireStatus }
+`
+
+// A function declared for a pair of enums is called for every field of that
+// pair, in place of the one that would be written, which is how //kanna:allow
+// reaches a field.
+func TestPlans_DeclaredEnums(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": enumsSrc + `
+//kanna:mapper
+type _ interface {
+	StatusToPB(Status) (WireStatus, error)
+
+	//kanna:allow unspecified
+	statusFromPB(in WireStatus) (Status, error)
+
+	OrderFromPB(OrderPB) (Order, error)
+}
+`}))
+
+	want := []string{
+		"StatusToPB(src test.Status) test.WireStatus (fallible)\n  StatusOn -> WireStatus_WIRE_STATUS_ON",
+		"statusFromPB(in test.WireStatus) test.Status (fallible)\n" +
+			`  WireStatus_WIRE_STATUS_UNSPECIFIED -> ""` + "\n" +
+			"  WireStatus_WIRE_STATUS_ON -> StatusOn",
+		"OrderFromPB(src test.OrderPB) test.Order (fallible)\n  Status = .Status call:statusFromPB",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
+// A constant matching protobuf's 0 by name is a value like any other, with or
+// without //kanna:allow.
+func TestPlans_AConstantForUnspecified(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": strings.ReplaceAll(enumsSrc,
+		`const StatusOn Status = "on"`,
+		`const (
+	StatusUnspecified Status = "unspecified"
+	StatusOn          Status = "on"
+)`) + `
+//kanna:mapper
+type _ interface {
+	StatusFromPB(WireStatus) (Status, error)
+}
+`}))
+
+	want := []string{
+		"StatusFromPB(src test.WireStatus) test.Status (fallible)\n" +
+			"  WireStatus_WIRE_STATUS_UNSPECIFIED -> StatusUnspecified\n" +
+			"  WireStatus_WIRE_STATUS_ON -> StatusOn",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
+func TestPlans_DeclaredEnumFromProtobufReturnsAnError(t *testing.T) {
+	t.Parallel()
+
+	_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": enumsSrc + `
+//kanna:mapper
+type _ interface {
+	StatusFromPB(WireStatus) Status
+}
+`}))
+
+	want := "error: StatusFromPB has to return an error: test.WireStatus can hold what test.Status has no value for\n" +
+		"  declare it as StatusFromPB(test.WireStatus) (test.Status, error)"
+	if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, want) }) {
+		t.Errorf("diagnostics = %q, want one containing %q", diags, want)
+	}
+}
+
+// A struct's function that calls a fallible declared enum function has to
+// return an error too, as going out it otherwise need not.
+func TestPlans_DeclaredEnumGoingOutThatCanFail(t *testing.T) {
+	t.Parallel()
+
+	_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": enumsSrc + `
+//kanna:mapper
+type _ interface {
+	StatusToPB(Status) (WireStatus, error)
+	OrderToPB(Order) OrderPB
+}
+`}))
+
+	want := "error: OrderToPB has to return an error: Status is mapped by StatusToPB, which can fail"
+	if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, want) }) {
+		t.Errorf("diagnostics = %q, want one containing %q", diags, want)
 	}
 }
 

@@ -46,6 +46,47 @@ func employee() model.Employee {
 	}
 }
 
+// Functions declared for a pair of enums map the constants by name, and what the
+// other enum has no value for is an error, UNSPECIFIED and the empty string too.
+func TestGenerated_DeclaredEnums(t *testing.T) {
+	t.Parallel()
+
+	if got, err := mapper.ChannelToWire(model.ChannelPhone); err != nil || got != wire.Channel_CHANNEL_PHONE {
+		t.Errorf("ChannelToWire(phone) = %v, %v", got, err)
+	}
+	if got, err := mapper.ChannelFromWire(wire.Channel_CHANNEL_EMAIL); err != nil || got != model.ChannelEmail {
+		t.Errorf("ChannelFromWire(EMAIL) = %q, %v", got, err)
+	}
+
+	going := []struct {
+		in   model.Channel
+		want string
+	}{
+		{"fax", `wire.Channel has no value for "fax"`},
+		{"", `wire.Channel has no value for ""`},
+	}
+	for _, tt := range going {
+		got, err := mapper.ChannelToWire(tt.in)
+		if got != wire.Channel_CHANNEL_UNSPECIFIED || err == nil || err.Error() != tt.want {
+			t.Errorf("ChannelToWire(%q) = %v, %v, want UNSPECIFIED and %q", tt.in, got, err, tt.want)
+		}
+	}
+
+	coming := []struct {
+		in   wire.Channel
+		want string
+	}{
+		{wire.Channel_CHANNEL_UNSPECIFIED, "model.Channel has no value for CHANNEL_UNSPECIFIED"},
+		{wire.Channel(9), "model.Channel has no value for 9"},
+	}
+	for _, tt := range coming {
+		got, err := mapper.ChannelFromWire(tt.in)
+		if got != "" || err == nil || err.Error() != tt.want {
+			t.Errorf("ChannelFromWire(%v) = %q, %v, want %q", tt.in, got, err, tt.want)
+		}
+	}
+}
+
 // A sum type goes out as the arm of the oneof its variant is named after, and
 // comes back as that variant; none set is nil either way.
 func TestGenerated_SumType(t *testing.T) {
@@ -156,9 +197,12 @@ func TestGenerated_Nil(t *testing.T) {
 		t.Errorf("EmployeeToWire(zero) = %+v, want nil fields and no contact arm", w)
 	}
 	// An enum's zero value, which stands for none, goes out as the unspecified
-	// value, and comes back as itself.
+	// value, and comes back as itself where its function allows that.
 	if w.Status != wire.Status_STATUS_UNSPECIFIED {
 		t.Errorf("EmployeeToWire(zero).Status = %v, want STATUS_UNSPECIFIED", w.Status)
+	}
+	if e, err := mapper.EmployeeFromWire(&wire.Employee{Id: "192.0.2.1"}); err != nil || e.Status != "" {
+		t.Errorf("EmployeeFromWire(no status) = %q, %v, want an empty status", e.Status, err)
 	}
 
 	got, err := mapper.EmployeeFromWire(nil)

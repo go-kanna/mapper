@@ -11,15 +11,14 @@ import (
 	"github.com/go-kanna/internal/enumtype"
 )
 
-// enumPlan is the body of a function written for an enum of kanna-value and an
-// enum of protobuf, in either direction: a switch from each value of the source
-// to the value of the destination whose name matches its own.
+// enumPlan is the body of a function for an enum of kanna-value and an enum of
+// protobuf, in either direction: a switch from each value of the source to the
+// value of the destination whose name matches its own.
 type enumPlan struct {
 	cases []enumCase
 
-	// zero is what a value no case takes becomes going out to protobuf: the
-	// protobuf enum's constant for 0, or nil for a literal 0. Coming back, such
-	// a value is an error instead.
+	// zero is the zero value of protobuf going out: the constant for 0, or nil
+	// for a literal 0. Coming back, it is nil.
 	zero *types.Const
 }
 
@@ -60,11 +59,13 @@ func protoEnum(t types.Type) (*types.Named, bool) {
 		types.Identical(sig.Results().At(0).Type(), types.NewPointer(named))
 }
 
-// planEnum works out how f, written for an enumPair, maps the constants of its
-// source to those of its destination, and says which constant of the enum of
-// kanna-value has no counterpart. Going out, a value no case takes becomes the
-// zero value of protobuf; coming back, an error, so f returns one.
-func (p *planner) planEnum(f *function, at site) *plan {
+// planEnum works out how f, for an enumPair, maps the constants of its source to
+// those of its destination, and says which constant of the enum of kanna-value
+// has no counterpart. Going out, a value no case takes becomes the zero value of
+// protobuf, or an error if f is declared to return one. Coming back, it is an
+// error, so f has to return one, and so is protobuf's 0, unless a constant
+// matches it or f allows it.
+func (p *planner) planEnum(f *function, at site, param string) *plan {
 	goEnum, out := enumtype.Of(f.src)
 	proto, _ := protoEnum(f.dst)
 	if !out {
@@ -102,12 +103,18 @@ func (p *planner) planEnum(f *function, at site) *plan {
 	}
 
 	for _, pc := range protoConsts {
-		if number(pc) == 0 && ep.zero == nil {
+		if out && number(pc) == 0 && ep.zero == nil {
 			ep.zero = pc
 		}
 	}
 	if !out {
+		if d := f.decl; d != nil && !d.fallible {
+			p.diags = append(p.diags, diag.Errorf(at.pos, "%s has to return an error: %s can hold what %s has no value for",
+				d.name, typeLabel(d.src), typeLabel(d.dst)).
+				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
+		}
 		f.fallible = true
+		allowed := f.decl != nil && f.decl.allowUnspecified
 		done := make(map[int64]bool)
 		for _, pc := range protoConsts {
 			n := number(pc)
@@ -118,12 +125,12 @@ func (p *planner) planEnum(f *function, at site) *plan {
 			switch c := matched[n]; {
 			case c != nil:
 				ep.cases = append(ep.cases, enumCase{src: pc, dst: c})
-			case n == 0:
+			case n == 0 && allowed:
 				ep.cases = append(ep.cases, enumCase{src: pc})
 			}
 		}
 	}
-	return &plan{fn: f, param: "src", enum: ep}
+	return &plan{fn: f, param: param, enum: ep}
 }
 
 // resultLabel spells what f returns, with its error if it has one.
