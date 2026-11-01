@@ -593,6 +593,19 @@ handled: converted with `uuid.Parse` and `(*timestamppb.Timestamp).AsTime` liste
 between packages, renamed with a tag, excluded with `map:"-"` and with `//kanna:map`, mapped through a function written
 for a nested pair, and folded into a oneof. CI regenerates it and fails if the output would change.
 
+To try it, use Go 1.27 or later: the example uses the standard library's `uuid` package, while kanna-mapper itself requires Go 1.26. No database or protobuf compiler is needed; the wire types are included in the example.
+
+```sh
+git clone https://github.com/go-kanna/mapper.git
+cd mapper/example
+go generate ./...
+go run .
+```
+
+Read the [domain types](example/model/model.go), [wire types](example/gen/employeev1/employee.go), and [mapping declarations](example/mapper/mapper.go) alongside the [generated functions](example/mapper/mapper_gen.go). The declarations name the functions and list the conversions; the generated code fills the fields, converts UUIDs and timestamps, and handles nested values and oneofs.
+
+In the output, `same id=true` shows that the UUID survived the round trip through a string, and `postal nil=true` shows that the unset oneof arm stayed absent. The final `bad id:` line shows the error returned for an invalid UUID, including the destination field `model.Employee.ID`.
+
 ## Development
 
 ```sh

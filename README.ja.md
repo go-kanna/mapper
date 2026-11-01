@@ -481,6 +481,19 @@ kanna-mapper [flags] [packages]
 
 [`example`](example) は、ドメインの集約を protobuf 形式のワイヤ型にマッピングし、またドメインに戻します。フィールドの扱い方をひととおり示しています: `uuid.Parse` と `(*timestamppb.Timestamp).AsTime` をそのままリストに挙げた変換、パッケージ間で共有するリストを通じた変換、タグによる名前の変更、`map:"-"` と `//kanna:map` による除外、ネストした組のために生成された関数によるマッピング、oneof への集約です。CI はこれを再生成し、出力が変わる場合は失敗します。
 
+試すには Go 1.27 以降を使ってください。kanna-mapper 自体は Go 1.26 に対応していますが、このサンプルは標準ライブラリの `uuid` パッケージを使います。ワイヤ型はサンプルに含まれているため、データベースや protobuf コンパイラは不要です。
+
+```sh
+git clone https://github.com/go-kanna/mapper.git
+cd mapper/example
+go generate ./...
+go run .
+```
+
+[ドメイン型](example/model/model.go)、[ワイヤ型](example/gen/employeev1/employee.go)、[マッピングの宣言](example/mapper/mapper.go) を、[生成された関数](example/mapper/mapper_gen.go) と見比べてください。宣言では関数名と変換のリストを記述し、生成コードがフィールドへの代入、UUID や時刻の変換、ネストした値や oneof の処理を担います。
+
+出力の `same id=true` は、UUID が文字列を経由して元の値に戻ったことを示します。`postal nil=true` は、設定していない oneof の選択肢が未設定のまま戻ったことを示します。最後の `bad id:` 行では、不正な UUID に対して返されるエラーと、変換先のフィールド `model.Employee.ID` を確認できます。
+
 ## 開発
 
 ```sh
