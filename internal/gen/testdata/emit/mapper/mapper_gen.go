@@ -221,6 +221,41 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 	return dst, nil
 }
 
+// statusToModel maps wire.Status to model.Status.
+func statusToModel(src wire.Status) (model.Status, error) {
+	switch src {
+	case wire.Status_STATUS_UNSPECIFIED:
+		return "", nil
+	case wire.Status_STATUS_ACTIVE:
+		return model.StatusActive, nil
+	case wire.Status_STATUS_ON_LEAVE:
+		return model.StatusOnLeave, nil
+	}
+	return "", fmt.Errorf("model.Status has no value for %v", src)
+}
+
+// ChannelToWire maps model.Channel to wire.Channel.
+func ChannelToWire(c model.Channel) (wire.Channel, error) {
+	switch c {
+	case model.ChannelEmail:
+		return wire.Channel_CHANNEL_EMAIL, nil
+	case model.ChannelPhone:
+		return wire.Channel_CHANNEL_PHONE, nil
+	}
+	return wire.Channel_CHANNEL_UNSPECIFIED, fmt.Errorf("wire.Channel has no value for %q", c)
+}
+
+// ChannelFromWire maps wire.Channel to model.Channel.
+func ChannelFromWire(src wire.Channel) (model.Channel, error) {
+	switch src {
+	case wire.Channel_CHANNEL_EMAIL:
+		return model.ChannelEmail, nil
+	case wire.Channel_CHANNEL_PHONE:
+		return model.ChannelPhone, nil
+	}
+	return "", fmt.Errorf("model.Channel has no value for %v", src)
+}
+
 // addressToWire maps model.Address to *wire.Address.
 func addressToWire(src model.Address) *wire.Address {
 	return &wire.Address{
@@ -291,19 +326,6 @@ func contactToModel(src *wire.Contact) model.Contact {
 		}
 	}
 	return dst
-}
-
-// statusToModel maps wire.Status to model.Status.
-func statusToModel(src wire.Status) (model.Status, error) {
-	switch src {
-	case wire.Status_STATUS_UNSPECIFIED:
-		return "", nil
-	case wire.Status_STATUS_ACTIVE:
-		return model.StatusActive, nil
-	case wire.Status_STATUS_ON_LEAVE:
-		return model.StatusOnLeave, nil
-	}
-	return "", fmt.Errorf("model.Status has no value for %v", src)
 }
 
 // bankToModel maps *wire.Bank to model.Bank.

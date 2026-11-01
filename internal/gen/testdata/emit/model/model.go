@@ -48,6 +48,14 @@ const (
 	StatusOnLeave Status = "on_leave"
 )
 
+// Channel is an enum whose functions the mapper declares, written to no field.
+type Channel string
+
+const (
+	ChannelEmail Channel = "email"
+	ChannelPhone Channel = "phone"
+)
+
 // Shift is an enum of kanna-value that the wire carries as an optional string,
 // held to its constants by its constructor on the way back.
 //

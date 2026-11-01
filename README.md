@@ -139,7 +139,8 @@ Each method of a `//kanna:mapper` interface is a function kanna-mapper writes, w
 there:
 
 - one parameter, the source, and a result that is the destination or `(destination, error)`;
-- the source and the destination are struct types or pointers to them, and not generic;
+- the source and the destination are struct types or pointers to them, and not generic, or an
+  [enum of kanna-value and an enum of protobuf](#enums);
 - the parameter's name is used when it has one, `src` otherwise;
 - the method's doc comment becomes the function's, `//kanna:` lines left out; without one, the function gets the
   sentence above;
@@ -435,8 +436,6 @@ func orderStatusToOrderv1(src model.OrderStatus) orderv1.OrderStatus {
 // orderStatusToModel maps orderv1.OrderStatus to model.OrderStatus.
 func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 	switch src {
-	case orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED:
-		return "", nil
 	case orderv1.OrderStatus_ORDER_STATUS_PLACED:
 		return model.OrderStatusPlaced, nil
 	case orderv1.OrderStatus_ORDER_STATUS_PAID:
@@ -446,15 +445,34 @@ func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 }
 ```
 
-Protobuf's 0 and the domain's empty string both stand for no value, and map to each other, unless a constant matches the
-0 value by name. A value protobuf has and the domain does not, or a number nobody declared, is an error coming back, so
-a function mapping an enum from protobuf has to return one. A constant the domain has and protobuf does not stops
-generation instead:
+A value protobuf has and the domain does not, or a number nobody declared, is an error coming back, so a function
+mapping an enum from protobuf has to return one. Protobuf's 0 is such a value, unless a constant matches it by name.
+Going out, what is none of the constants, the empty string included, becomes protobuf's 0. A constant the domain has
+and protobuf does not stops generation instead:
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
   add ORDER_STATUS_REFUNDED to it, or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
 ```
+
+Declare either function in a `//kanna:mapper` interface to call it yourself, under the name and signature you give it.
+It takes the place of the function written above, for every field of that pair:
+
+```go
+//kanna:mapper
+type _ interface {
+	OrderStatusToProto(model.OrderStatus) (orderv1.OrderStatus, error)
+
+	//kanna:allow unspecified
+	orderStatusToModel(orderv1.OrderStatus) (model.OrderStatus, error)
+}
+```
+
+Going out, declaring an error makes what is none of the constants an error too, rather than protobuf's 0.
+
+`//kanna:allow unspecified` makes protobuf's 0 the domain's empty string rather than an error, for a value that may be
+left out, or that a `required` rule is to report along with the other rules of a request. An unexported method, as
+here, adds nothing to the package's API. On anything but a function from an enum of protobuf, it stops generation.
 
 A plain string, such as a field a message carries as `string`, becomes an enum of kanna-value through its constructor,
 `NewOrderStatus`, which rejects a string that is none of the constants, the empty one included: map an optional field

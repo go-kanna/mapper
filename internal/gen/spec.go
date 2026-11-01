@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"go/types"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-kanna/internal/diag"
@@ -26,6 +27,13 @@ const strictOption = "strict"
 // shareKey spells the directive //kanna:share, which names the destination
 // fields whose slices and maps are handed on as they are rather than copied.
 const shareKey = "share"
+
+// allowKey spells the directive //kanna:allow, which lets a function take a value
+// it would otherwise reject.
+const allowKey = "allow"
+
+// unspecifiedOption is the argument of //kanna:allow unspecified.
+const unspecifiedOption = "unspecified"
 
 // decl is a function a //kanna:mapper interface declares.
 type decl struct {
@@ -54,6 +62,10 @@ type decl struct {
 	// share names the destination fields of //kanna:share, whose slices and
 	// maps are handed on as they are rather than copied. Only field is set.
 	share []entry
+
+	// allowUnspecified reports //kanna:allow unspecified: protobuf's 0 becomes
+	// the empty string of the enum of kanna-value rather than an error.
+	allowUnspecified bool
 }
 
 // entry is one Field=Source of a //kanna:map line, or Field alone, which
@@ -122,10 +134,12 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 		diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s takes no argument but %s, got %q", mapperKey, strictOption,
 			d.Args))
 	}
-	m, ds := directive.Find(pkg.Fset, doc, mapKey)
-	if diags = append(diags, ds...); m.Found {
-		diags = append(diags, diag.Errorf(m.Pos,
-			"//kanna:%s goes above a method of the interface, not the interface", mapKey))
+	for _, key := range []string{mapKey, allowKey} {
+		m, ds := directive.Find(pkg.Fset, doc, key)
+		if diags = append(diags, ds...); m.Found {
+			diags = append(diags, diag.Errorf(m.Pos,
+				"//kanna:%s goes above a method of the interface, not the interface", key))
+		}
 	}
 
 	pos := pkg.Fset.Position(ts.Name.Pos())
@@ -182,6 +196,7 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 
 	var diags []diag.Diag
 	src, dst := sig.Params().At(0).Type(), res.At(0).Type()
+	enums := enumPair(src, dst)
 	for _, side := range []struct {
 		role string
 		t    types.Type
@@ -190,7 +205,7 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 			diags = append(diags, packages.NotTypeChecked(pos))
 			continue
 		}
-		if problem, hints := pairTypeProblem(side.t); problem != "" {
+		if problem, hints := pairTypeProblem(side.t); problem != "" && !enums {
 			diags = append(diags, diag.Errorf(pos, "%s: the %s, %s, %s", name, side.role, typeLabel(side.t), problem).
 				WithHints(hints...))
 		}
@@ -198,7 +213,13 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 
 	entries, ds := mapEntries(fset, doc)
 	share, ds2 := shareEntries(fset, doc)
-	if diags = append(append(diags, ds...), ds2...); diag.HasErrors(diags) {
+	allow, ds3 := allowsUnspecified(fset, doc, name, src, dst)
+	diags = slices.Concat(diags, ds, ds2, ds3)
+	if enums && len(entries)+len(share) > 0 {
+		diags = append(diags, diag.Errorf(pos, "%s maps enums, which have no fields for //kanna:%s or //kanna:%s to name",
+			name, mapKey, shareKey))
+	}
+	if diag.HasErrors(diags) {
 		return decl{}, diags
 	}
 
@@ -207,15 +228,16 @@ func declOf(fset *token.FileSet, fn *types.Func, doc *ast.CommentGroup) (decl, [
 		param = "src"
 	}
 	return decl{
-		name:     name,
-		param:    param,
-		src:      src,
-		dst:      dst,
-		fallible: fallible,
-		doc:      strings.TrimSpace(doc.Text()),
-		pos:      pos,
-		entries:  entries,
-		share:    share,
+		name:             name,
+		param:            param,
+		src:              src,
+		dst:              dst,
+		fallible:         fallible,
+		doc:              strings.TrimSpace(doc.Text()),
+		pos:              pos,
+		entries:          entries,
+		share:            share,
+		allowUnspecified: allow,
 	}, diags
 }
 
@@ -291,6 +313,26 @@ func shareEntries(fset *token.FileSet, doc *ast.CommentGroup) ([]entry, []diag.D
 		share = append(share, entry{field: field, pos: d.Pos})
 	}
 	return share, diags
+}
+
+// allowsUnspecified reads the //kanna:allow line of doc, a method declaring
+// name from src to dst, whose only use is on a function from an enum of protobuf.
+func allowsUnspecified(
+	fset *token.FileSet, doc *ast.CommentGroup, name string, src, dst types.Type,
+) (bool, []diag.Diag) {
+	d, diags := directive.Find(fset, doc, allowKey)
+	if !d.Found {
+		return false, diags
+	}
+	if d.Args != unspecifiedOption {
+		return false, append(diags, diag.Errorf(d.Pos, "//kanna:%s takes %s, got %q", allowKey, unspecifiedOption, d.Args))
+	}
+	if _, fromProto := protoEnum(src); !fromProto || !enumPair(src, dst) {
+		return false, append(diags, diag.Errorf(d.Pos,
+			"//kanna:%s %s goes on a function from an enum of protobuf to an enum of kanna-value, which %s is not",
+			allowKey, unspecifiedOption, name))
+	}
+	return true, diags
 }
 
 // mapEntries reads the //kanna:map line of doc. Whether each entry names a

@@ -19,6 +19,12 @@ type _ interface {
 	//kanna:share Photo
 	EmployeeToWire(model.Employee) *wire.Employee
 	EmployeeFromWire(e *wire.Employee) (model.Employee, error)
+
+	//kanna:allow unspecified
+	statusToModel(wire.Status) (model.Status, error)
+
+	ChannelToWire(c model.Channel) (wire.Channel, error)
+	ChannelFromWire(wire.Channel) (model.Channel, error)
 }
 
 //kanna:converter

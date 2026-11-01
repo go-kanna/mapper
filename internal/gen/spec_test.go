@@ -80,7 +80,9 @@ func TestDecls_Diagnostics(t *testing.T) {
 	t.Parallel()
 
 	// Every case uses these, after its own declarations.
-	const pair = "\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n"
+	const pair = "\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n" +
+		"\ntype S string\n\nconst SOn S = \"on\"\n" +
+		"\ntype P int32\n\nconst P_ON P = 1\n\nfunc (x P) Enum() *P { return &x }\n"
 
 	tests := []struct {
 		name string
@@ -214,6 +216,53 @@ func TestDecls_Diagnostics(t *testing.T) {
 			name: "//kanna:map saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map\n\tF(E) W\n}\n",
 			want: "test.go:5:2: error: //kanna:map needs at least one Field, Field=Source, or Field=-",
+		},
+		{
+			name: "an enum on one side alone",
+			src:  "//kanna:mapper\ntype _ interface {\n\tF(S) W\n}\n",
+			want: "test.go:5:2: error: F: the source, test.S, is not a struct or a pointer to one",
+		},
+		{
+			name: "//kanna:map on a function of enums",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Name=-\n\tF(S) P\n}\n",
+			want: "test.go:6:2: error: F maps enums, which have no fields for //kanna:map or //kanna:share to name",
+		},
+		{
+			name: "//kanna:share on a function of enums",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:share Name\n\tF(S) P\n}\n",
+			want: "test.go:6:2: error: F maps enums, which have no fields for //kanna:map or //kanna:share to name",
+		},
+		{
+			name: "//kanna:allow on the interface",
+			src:  "//kanna:mapper\n//kanna:allow unspecified\ntype _ interface{ F(P) (S, error) }\n",
+			want: "test.go:4:1: error: //kanna:allow goes above a method of the interface, not the interface",
+		},
+		{
+			name: "//kanna:allow saying nothing",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow\n\tF(P) (S, error)\n}\n",
+			want: `test.go:5:2: error: //kanna:allow takes unspecified, got ""`,
+		},
+		{
+			name: "//kanna:allow of something else",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow zero\n\tF(P) (S, error)\n}\n",
+			want: `test.go:5:2: error: //kanna:allow takes unspecified, got "zero"`,
+		},
+		{
+			name: "//kanna:allow going out to protobuf",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow unspecified\n\tF(S) P\n}\n",
+			want: "test.go:5:2: error: //kanna:allow unspecified goes on a function from an enum of protobuf " +
+				"to an enum of kanna-value, which F is not",
+		},
+		{
+			name: "//kanna:allow on a function of structs",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow unspecified\n\tF(E) W\n}\n",
+			want: "test.go:5:2: error: //kanna:allow unspecified goes on a function from an enum of protobuf " +
+				"to an enum of kanna-value, which F is not",
+		},
+		{
+			name: "a line like //kanna:allow",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allw unspecified\n\tF(P) (S, error)\n}\n",
+			want: `did you mean "//kanna:allow unspecified"?`,
 		},
 		{
 			name: "a name declared by two interfaces",

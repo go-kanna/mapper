@@ -25,8 +25,7 @@ type plan struct {
 	srcOneofs []srcOneofPlan
 	sums      []sumPlan
 
-	// enum is the body of a function written for a pair of enums instead, or
-	// nil.
+	// enum is the body of a function for a pair of enums instead, or nil.
 	enum *enumPlan
 }
 
@@ -104,7 +103,7 @@ func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]t
 // plan plans f, whose problems go to at.
 func (p *planner) plan(f *function, at site, param string, entries []entry) {
 	if enumPair(f.src, f.dst) {
-		p.plans = append(p.plans, p.planEnum(f, at))
+		p.plans = append(p.plans, p.planEnum(f, at, param))
 		return
 	}
 

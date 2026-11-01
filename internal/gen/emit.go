@@ -132,9 +132,9 @@ func (e *emitter) sumArm(target string, c sumCase, val, field string) {
 	fmt.Fprintf(&e.b, "%s = &%s{%s: %s}\n", target, e.typ(c.arm.wrapper), c.arm.field.Name(), x)
 }
 
-// enumFunction writes a function written for a pair of enums: a switch over
-// the constants of its source. A value matching none becomes the zero value of
-// protobuf going out, and an error coming back.
+// enumFunction writes a function for a pair of enums: a switch over the
+// constants of its source. A value matching none is an error where the function
+// returns one, and the zero value of protobuf where it does not.
 func (e *emitter) enumFunction() {
 	fn, ep := e.pl.fn, e.pl.enum
 	dstT := e.typ(fn.dst)
@@ -147,8 +147,15 @@ func (e *emitter) enumFunction() {
 	}
 	fmt.Fprintf(&e.b, "func %s(%s %s) %s {\n", fn.name, e.src, e.typ(fn.src), result)
 	fmt.Fprintf(&e.b, "switch %s {\n", e.src)
+	zero, verb := `""`, "%%v"
+	if _, out := protoEnum(fn.dst); out {
+		zero, verb = "0", "%%q"
+		if ep.zero != nil {
+			zero = e.constant(ep.zero)
+		}
+	}
 	for _, c := range ep.cases {
-		dst := `""`
+		dst := zero
 		if c.dst != nil {
 			dst = e.constant(c.dst)
 		}
@@ -156,15 +163,11 @@ func (e *emitter) enumFunction() {
 	}
 	e.b.WriteString("}\n")
 	if !fn.fallible {
-		zero := "0"
-		if ep.zero != nil {
-			zero = e.constant(ep.zero)
-		}
 		fmt.Fprintf(&e.b, "return %s\n}\n", zero)
 		return
 	}
-	fmt.Fprintf(&e.b, "return \"\", %s.Errorf(\"%s has no value for %%v\", %s)\n}\n",
-		e.f.Import("fmt", "fmt"), typeLabel(fn.dst), e.src)
+	fmt.Fprintf(&e.b, "return %s, %s.Errorf(\"%s has no value for "+verb+"\", %s)\n}\n",
+		zero, e.f.Import("fmt", "fmt"), typeLabel(fn.dst), e.src)
 }
 
 // constant spells c, a package-level constant, as the file refers to it.

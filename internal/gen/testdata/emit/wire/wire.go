@@ -57,6 +57,35 @@ func (x Status) String() string {
 	return strconv.Itoa(int(x))
 }
 
+// Channel is an enum as protoc-gen-go writes one, whose functions the mapper
+// declares.
+type Channel int32
+
+const (
+	Channel_CHANNEL_UNSPECIFIED Channel = 0
+	Channel_CHANNEL_EMAIL       Channel = 1
+	Channel_CHANNEL_PHONE       Channel = 2
+)
+
+var Channel_name = map[int32]string{
+	0: "CHANNEL_UNSPECIFIED",
+	1: "CHANNEL_EMAIL",
+	2: "CHANNEL_PHONE",
+}
+
+func (x Channel) Enum() *Channel {
+	p := new(Channel)
+	*p = x
+	return p
+}
+
+func (x Channel) String() string {
+	if name, ok := Channel_name[int32(x)]; ok {
+		return name
+	}
+	return strconv.Itoa(int(x))
+}
+
 type Employee struct {
 	state    int
 	Id       string
