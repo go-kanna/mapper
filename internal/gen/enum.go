@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/types"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -81,6 +82,7 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		}
 	}
 
+	shared := sharedPrefix(goEnum.Constants)
 	ep := &enumPlan{}
 	matched := make(map[int64]*types.Const) // the constant of kanna-value for each number
 	for _, c := range goEnum.Constants {
@@ -89,10 +91,14 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		}
 		pc, ok := byKey[goKey(goEnum.Named, c)]
 		if !ok {
+			pc, ok = byKey[normalize(goName(goEnum.Named, c, shared))]
+		}
+		if !ok {
 			p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s has no counterpart in %s",
 				at.path, qualifiedName(c, labelQualifier), typeLabel(proto)).
 				WithHints(fmt.Sprintf("add %s to it, or list a func(%s) %s in a //kanna:%s list",
-					protoName(proto, protoConsts, goEnum.Named, c), typeLabel(f.src), resultLabel(f), converterKey)))
+					protoName(proto, protoConsts, goName(goEnum.Named, c, shared)), typeLabel(f.src), resultLabel(f),
+					converterKey)))
 			continue
 		}
 		if out {
@@ -152,11 +158,51 @@ func number(c *types.Const) int64 {
 // matched by: its name past the type's, such as Placed for OrderStatusPlaced,
 // in lower case.
 func goKey(named *types.Named, c *types.Const) string {
-	name := strings.TrimPrefix(c.Name(), named.Obj().Name())
-	if name == "" {
-		name = c.Name()
+	return normalize(goName(named, c, ""))
+}
+
+// goName returns the name of c, a constant of the enum of kanna-value named, past
+// the type's name, or else past shared: Placed for OrderStatusPlaced, and Sandbox
+// for APNsSandbox of the type APNsEnvironment, with APNs shared.
+func goName(named *types.Named, c *types.Const, shared string) string {
+	for _, prefix := range []string{named.Obj().Name(), shared} {
+		if rest, ok := strings.CutPrefix(c.Name(), prefix); ok && rest != "" {
+			return rest
+		}
 	}
-	return normalize(name)
+	return c.Name()
+}
+
+// sharedPrefix returns the whole words every constant of consts starts with, APNs
+// of APNsSandbox and APNsProduction, which tell none of them apart. A lone
+// constant has nothing to share them with, so it gives "".
+func sharedPrefix(consts []*types.Const) string {
+	if len(consts) < 2 {
+		return ""
+	}
+	prefix := []rune(consts[0].Name())
+	for _, c := range consts[1:] {
+		name := []rune(c.Name())
+		n := 0
+		for n < min(len(prefix), len(name)) && prefix[n] == name[n] {
+			n++
+		}
+		prefix = prefix[:n]
+	}
+	for n := len(prefix); n > 0; n-- {
+		if !slices.ContainsFunc(consts, func(c *types.Const) bool { return !wordStart([]rune(c.Name()), n) }) {
+			return string(prefix[:n])
+		}
+	}
+	return ""
+}
+
+// wordStart reports whether a word of the Go name r starts at i, past its first:
+// at a capital after anything else, or before a small letter, as Error starts
+// HTTPError.
+func wordStart(r []rune, i int) bool {
+	return i > 0 && i < len(r) && unicode.IsUpper(r[i]) &&
+		(!unicode.IsUpper(r[i-1]) || i+1 < len(r) && unicode.IsLower(r[i+1]))
 }
 
 // protoKey is what the name of c, a constant of the protobuf enum named, is
@@ -194,16 +240,11 @@ func protoEnumName(named *types.Named) string {
 	return name[strings.LastIndex(name, "_")+1:]
 }
 
-// protoName suggests a name for the value of the protobuf enum named that c, a
-// constant of the enum of kanna-value goEnum, would match, after the style of
-// consts, its constants: REFUNDED, or ORDER_STATUS_REFUNDED when they start
-// with the enum's name.
-func protoName(named *types.Named, consts []*types.Const, goEnum *types.Named, c *types.Const) string {
-	name := strings.TrimPrefix(c.Name(), goEnum.Obj().Name())
-	if name == "" {
-		name = c.Name()
-	}
-	name = upperSnake(name)
+// protoName suggests a name for the value of the protobuf enum named that a
+// constant called goName would match, after the style of consts, its constants:
+// REFUNDED, or ORDER_STATUS_REFUNDED when they start with the enum's name.
+func protoName(named *types.Named, consts []*types.Const, goName string) string {
+	name := upperSnake(goName)
 	prefix := normalize(protoEnumName(named))
 	for _, pc := range consts {
 		if strings.HasPrefix(normalize(protoValue(named, pc)), prefix) {
@@ -225,8 +266,7 @@ func upperSnake(s string) string {
 	r := []rune(s)
 	var b strings.Builder
 	for i, c := range r {
-		if i > 0 && unicode.IsUpper(c) &&
-			(!unicode.IsUpper(r[i-1]) || i+1 < len(r) && unicode.IsLower(r[i+1])) {
+		if wordStart(r, i) {
 			b.WriteByte('_')
 		}
 		b.WriteRune(unicode.ToUpper(c))

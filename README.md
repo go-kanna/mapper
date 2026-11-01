@@ -419,7 +419,8 @@ the constructor, such as `deep.NewLevel`, which brings the package in.
 An [enum of kanna-value](https://github.com/go-kanna/value#enums), a string type whose values are its constants, maps to
 and from an enum of protobuf by the names of their constants: the Go constant's past its type's, `Placed` in
 `OrderStatusPlaced`, and the protobuf value's past its enum's, `PLACED` in `ORDER_STATUS_PLACED`, compared regardless of
-case and underscores. A function is written for each direction:
+case and underscores. A constant that matches nothing so is compared past the words all the constants of its enum start
+with: `Sandbox` in `APNsSandbox`, beside `APNsProduction`. A function is written for each direction:
 
 ```go
 // orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.

@@ -409,6 +409,95 @@ type _ interface {
 	}
 }
 
+// A constant matching nothing past the name of its type is compared past the
+// words every constant of its enum starts with, which tell none of them apart.
+func TestPlans_EnumsSharingAPrefix(t *testing.T) {
+	t.Parallel()
+
+	const wire = `
+type EnvPB int32
+
+const (
+	EnvPB_ENV_PB_UNSPECIFIED EnvPB = 0
+	EnvPB_ENV_PB_SANDBOX     EnvPB = 1
+	EnvPB_ENV_PB_STAGING     EnvPB = 2
+	EnvPB_ENV_PB_DEEP_SANDBOX EnvPB = 3
+)
+
+func (x EnvPB) Enum() *EnvPB { return &x }
+
+//kanna:mapper
+type _ interface {
+	EnvToPB(Env) EnvPB
+}
+`
+	const other = "  else -> EnvPB_ENV_PB_UNSPECIFIED"
+
+	tests := []struct {
+		name, src string
+		want      []string // the cases of the function
+		diag      string
+	}{
+		{
+			name: "the first word of the type",
+			src: "type APNsEnv string\n\nconst (\n\tAPNsSandbox APNsEnv = \"a\"\n\tAPNsStaging APNsEnv = \"b\"\n)\n" +
+				"type Env = APNsEnv\n",
+			want: []string{"  APNsSandbox -> EnvPB_ENV_PB_SANDBOX", "  APNsStaging -> EnvPB_ENV_PB_STAGING", other},
+		},
+		{
+			name: "the last word of the type",
+			src:  "type Env string\n\nconst (\n\tStageSandbox Env = \"a\"\n\tStageStaging Env = \"b\"\n)\n",
+			want: []string{"  StageSandbox -> EnvPB_ENV_PB_SANDBOX", "  StageStaging -> EnvPB_ENV_PB_STAGING", other},
+		},
+		{
+			name: "a name matching as it is comes first",
+			src:  "type Env string\n\nconst (\n\tDeepSandbox Env = \"a\"\n\tDeepStaging Env = \"b\"\n)\n",
+			want: []string{"  DeepSandbox -> EnvPB_ENV_PB_DEEP_SANDBOX", "  DeepStaging -> EnvPB_ENV_PB_STAGING", other},
+		},
+		{
+			name: "letters in common are no word in common",
+			src:  "type Env string\n\nconst (\n\tSandbox Env = \"a\"\n\tStaging Env = \"b\"\n)\n",
+			want: []string{"  Sandbox -> EnvPB_ENV_PB_SANDBOX", "  Staging -> EnvPB_ENV_PB_STAGING", other},
+		},
+		{
+			name: "what the words leave has to match whole",
+			src:  "type Env string\n\nconst (\n\tNotSandbox Env = \"a\"\n\tSandbox Env = \"b\"\n)\n",
+			diag: "EnvToPB: test.NotSandbox has no counterpart in test.EnvPB\n  add ENV_PB_NOT_SANDBOX to it",
+		},
+		{
+			name: "no constant to compare it with",
+			src:  "type Env string\n\nconst StageSandbox Env = \"a\"\n",
+			diag: "EnvToPB: test.StageSandbox has no counterpart in test.EnvPB\n  add ENV_PB_STAGE_SANDBOX to it",
+		},
+		{
+			name: "the hint leaves the shared words out",
+			src:  "type Env string\n\nconst (\n\tAPNsSandbox Env = \"a\"\n\tAPNsDevelopment Env = \"b\"\n)\n",
+			diag: "EnvToPB: test.APNsDevelopment has no counterpart in test.EnvPB\n  add ENV_PB_DEVELOPMENT to it",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + wire}))
+
+			if tt.diag != "" {
+				if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.diag) }) {
+					t.Errorf("diagnostics = %q, want one containing %q", diags, tt.diag)
+				}
+				return
+			}
+			if len(diags) > 0 {
+				t.Fatalf("diagnostics = %q, want none", diags)
+			}
+			got := strings.Split(found[0], "\n")[1:]
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("cases =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+			}
+		})
+	}
+}
+
 // enumsSrc is an enum of kanna-value and one of protobuf, and a struct holding
 // each.
 const enumsSrc = `package test
