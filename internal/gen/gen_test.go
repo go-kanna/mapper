@@ -195,6 +195,72 @@ var _ = []any{convert.Defaults}
 	compiles(t, dir)
 }
 
+// An enum or a value type seen only through another package is made by its
+// constructor, which its package is loaded for.
+func TestCommand_LoadsThePackageOfAnEnumOrAValueType(t *testing.T) {
+	t.Parallel()
+
+	dir := writeModule(t, map[string]string{
+		"domain/domain.go": `package domain
+
+import "errors"
+
+type Status string
+
+const StatusActive Status = "active"
+
+func NewStatus(v string) (Status, error) {
+	if Status(v) != StatusActive {
+		return "", errors.New("status")
+	}
+	return StatusActive, nil
+}
+
+type Nickname struct{ v string }
+
+func NewNickname(v string) (Nickname, error) {
+	if v == "" {
+		return Nickname{}, errors.New("nickname")
+	}
+	return Nickname{v: v}, nil
+}
+
+func (n Nickname) String() string { return n.v }
+`,
+		"model/model.go": `package model
+
+import "example.com/app/domain"
+
+type Employee struct {
+	Status   domain.Status
+	Nickname domain.Nickname
+}
+`,
+		"mapper.go": `package app
+
+import "example.com/app/model"
+
+type EmployeePB struct{ Status, Nickname string }
+
+//kanna:mapper
+type _ interface {
+	FromPB(EmployeePB) (model.Employee, error)
+}
+`,
+	})
+
+	if code, stdout, stderr := run(t, dir); code != cli.ExitOK || stdout != "" || stderr != "" {
+		t.Fatalf("run = %d, stdout %q, stderr %q; want success in silence", code, stdout, stderr)
+	}
+	got := readFile(t, filepath.Join(dir, "mapper_gen.go"))
+	for _, want := range []string{"domain.NewStatus(src.Status)", "domain.NewNickname(src.Nickname)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("mapper_gen.go does not contain %q:\n%s", want, got)
+		}
+	}
+	compiles(t, dir)
+}
+
 func TestCommand_RemovesWhatNoInterfaceDeclares(t *testing.T) {
 	t.Parallel()
 

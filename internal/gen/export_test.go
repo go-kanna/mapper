@@ -136,7 +136,7 @@ func eval(pkg *packages.Package, expr string) types.Type {
 func Plans(pkg *packages.Package) ([]string, []string) {
 	ds, _ := decls(pkg)
 	cs, _, _ := convsOf(pkg, nil, ds)
-	plans, diags := planFuncs(pkg, ds, cs, declaredNames(pkg))
+	plans, _, diags := planFuncs(pkg, ds, cs, declaredNames(pkg))
 
 	out := make([]string, len(plans))
 	for i, pl := range plans {
@@ -182,6 +182,15 @@ func Plans(pkg *packages.Package) ([]string, []string) {
 	return out, spell(diags)
 }
 
+// Missing returns the packages that planning the functions pkg declares needs
+// in full, of which only part is loaded.
+func Missing(pkg *packages.Package) []string {
+	ds, _ := decls(pkg)
+	cs, _, _ := convsOf(pkg, nil, ds)
+	_, missing, _ := planFuncs(pkg, ds, cs, declaredNames(pkg))
+	return missing
+}
+
 func describeRead(r read) string {
 	if r.getter {
 		return "." + r.name + "()"
@@ -200,7 +209,7 @@ func Emit(pkg *packages.Package, loaded []*packages.Package, declared map[string
 		byPath[p.PkgPath] = p
 	}
 	cs, _, cd := convsOf(pkg, byPath, ds)
-	plans, pd := planFuncs(pkg, ds, cs, declared)
+	plans, _, pd := planFuncs(pkg, ds, cs, declared)
 	if diags = append(append(diags, cd...), pd...); diag.HasErrors(diags) {
 		return nil, spell(diags), nil
 	}
@@ -249,7 +258,9 @@ func Ops(pkg *packages.Package, pairs ...[2]string) (ops, written []string) {
 	for i := range ds {
 		funcs.fs = append(funcs.fs, &function{name: ds[i].name, src: ds[i].src, dst: ds[i].dst, decl: &ds[i]})
 	}
-	c := converter{pkg: pkg.Types, convs: cs, funcs: funcs}
+	c := converter{pkg: pkg.Types, convs: cs, funcs: funcs, missing: func(p *types.Package) {
+		panic("only part of " + p.Path() + " is loaded")
+	}}
 
 	for _, p := range pairs {
 		o, ok := c.op(eval(pkg, p[0]), eval(pkg, p[1]))

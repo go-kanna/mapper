@@ -51,8 +51,11 @@ func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Dia
 	}
 
 	// A list another package declares is read from its syntax, which a package
-	// loaded only as an import does not have. Its package is then loaded too,
-	// alongside the others: the types of two loads are never identical.
+	// loaded only as an import does not have. An enum or a value type converts
+	// by the constants and the constructors beside it, which the export data
+	// of a package seen only through another need not carry. Such a package is
+	// then loaded too, alongside the others: the types of two loads are never
+	// identical.
 	var extra []string
 	for {
 		// Code calling a function the run writes does not compile before it
@@ -75,7 +78,7 @@ func run(dir string, cfg config, patterns []string) ([]output.Change, []diag.Dia
 			return changes, noTarget(set, targets, changes, ds, patterns)
 		}
 		if slices.ContainsFunc(missing, func(p string) bool { return slices.Contains(extra, p) }) {
-			return nil, []diag.Diag{diag.Errorf(token.Position{}, "cannot read the lists of %s",
+			return nil, []diag.Diag{diag.Errorf(token.Position{}, "cannot read what %s declares",
 				strings.Join(missing, ", "))}
 		}
 		extra = append(extra, missing...)
@@ -141,8 +144,7 @@ func noTarget(set packages.Set, targets map[string]bool, changes []output.Change
 // generate works out the changes for the packages of set that targets names:
 // the output of each package declaring functions, and the removal of what an
 // earlier run left in a package declaring none. It also returns the packages
-// whose lists are named but were not loaded with syntax, for the caller to
-// load and call again.
+// it needs but has only part of, for the caller to load and call again.
 func generate(set packages.Set, targets map[string]bool) ([]output.Change, []string, []diag.Diag) {
 	loaded := make(map[string]*packages.Package, len(set.Packages))
 	for _, pkg := range set.Packages {
@@ -177,7 +179,10 @@ func generate(set packages.Set, targets map[string]bool) ([]output.Change, []str
 			continue
 		}
 		declared := output.DeclaredNames(dir, outputFile, pkg.Name)
-		plans, pd := planFuncs(pkg, ds, cs, declared)
+		plans, miss, pd := planFuncs(pkg, ds, cs, declared)
+		if missing = append(missing, miss...); len(miss) > 0 {
+			continue
+		}
 		if diags = append(append(diags, cd...), pd...); diag.HasErrors(slices.Concat(dd, cd, pd)) {
 			continue
 		}

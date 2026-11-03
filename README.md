@@ -412,9 +412,9 @@ A value type is known by the shape kanna-value gives it, not by reading its `//k
 only the types of the package declaring it: a struct with one unexported field, a method named after the field's type
 returning it (`Time` for a `time.Time`, `String` for a `string`), and `NewX(T) (X, error)` beside it. A function listed
 for the pair is called instead, as for any other type. An unexported value type of another package cannot be made
-here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. So is a value type
-whose package this one sees only through another, whose export data carries the type without its constructor; list
-the constructor, such as `deep.NewLevel`, which brings the package in.
+here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. A value type whose
+package this one sees only through another is made the same way: the export data it is seen through carries the type
+without its constructor, so kanna-mapper loads the package declaring it too.
 
 ## Enums
 
@@ -483,7 +483,9 @@ to a pointer. The other way, the enum is a string already, and converts as it is
 
 An enum of protobuf is known by the shape protoc-gen-go gives it, an `int32` with an `Enum` method, and an enum of
 kanna-value by a string type with constants beside it, as kanna-mapper may see only the types of the package declaring
-it. A function listed for the pair is called instead, as for any other type.
+it. An enum whose package this one sees only through another is known as a value type is, once its package is loaded
+too: the export data it is seen through need not carry its constants and its constructor. A function listed for the
+pair is called instead, as for any other type.
 
 ## Protobuf oneofs
 

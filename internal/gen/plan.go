@@ -56,6 +56,8 @@ type planner struct {
 	sites map[*function]site // where a written function's problems go
 	diags []diag.Diag
 
+	missing []string // packages to load in full
+
 	// at and field say where the function being planned got to, for a
 	// function written on the way to say where it came from.
 	at    site
@@ -69,9 +71,14 @@ type planner struct {
 // planFuncs plans the functions ds declares in pkg and the ones written for
 // them, in that order, converting with cs. declared holds the top-level names
 // the package declares outside the generated file, which no function may take.
-func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]token.Position) ([]*plan, []diag.Diag) {
+// A package the conversions need in full, of which only part is loaded, is
+// returned in missing, for the caller to load and call again.
+func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]token.Position,
+) ([]*plan, []string, []diag.Diag) {
 	p := &planner{fset: pkg.Fset, taken: make(map[string]bool), sites: make(map[*function]site)}
-	p.conv = converter{pkg: pkg.Types, convs: cs, funcs: p}
+	p.conv = converter{pkg: pkg.Types, convs: cs, funcs: p, missing: func(pkg *types.Package) {
+		p.missing = append(p.missing, pkg.Path())
+	}}
 	for name := range declared {
 		p.taken[name] = true
 	}
@@ -97,7 +104,8 @@ func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]t
 	}
 
 	p.settleErrors()
-	return p.plans, dedupe(p.diags)
+	slices.Sort(p.missing)
+	return p.plans, slices.Compact(p.missing), dedupe(p.diags)
 }
 
 // plan plans f, whose problems go to at.
@@ -260,18 +268,10 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 	}
 	d = d.WithHints(hint)
 	if v, ok := valuetype.Of(derefType(dstT)); ok && !callable(v, p.conv.pkg) {
-		obj := v.Named.Obj()
-		newFunc, _ := valuetype.Constructors(obj.Name())
-		ctor := obj.Pkg().Name() + "." + newFunc
-		switch {
-		case !obj.Exported() && obj.Pkg() != p.conv.pkg:
-			d = d.WithHints(fmt.Sprintf("its constructor, %s, cannot be called here: it is not exported", ctor))
-		case obj.Pkg().Scope().Lookup(newFunc) == nil:
-			// Its package is seen only through another, whose export data
-			// carries the type but not the functions beside it.
-			d = d.WithHints(fmt.Sprintf("a value type of kanna-value is made by %s(%s) (%s, error), "+
-				"which this package does not see; list it in a //kanna:%s list",
-				ctor, typeLabel(v.Held), typeLabel(v.Named), converterKey))
+		if obj := v.Named.Obj(); !obj.Exported() && obj.Pkg() != p.conv.pkg {
+			newFunc, _ := valuetype.Constructors(obj.Name())
+			d = d.WithHints(fmt.Sprintf("its constructor, %s.%s, cannot be called here: it is not exported",
+				obj.Pkg().Name(), newFunc))
 		}
 	}
 	if isInterface(srcT) || isInterface(dstT) {
