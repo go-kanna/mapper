@@ -2,8 +2,10 @@ package gen
 
 import (
 	"cmp"
+	"go/token"
 	"go/types"
 	"slices"
+	"strings"
 
 	"github.com/go-kanna/internal/diag"
 )
@@ -17,11 +19,11 @@ type oneofArm struct {
 
 // oneofArms lists the arms of the oneof t is: the structs of the interface's
 // package that implement it through a pointer and wrap one exported field, in
-// the order they are declared, which protoc-gen-go makes the order of the
-// oneof's fields. An interface that a type implements by value is a sum type of
+// the order they are declared in fset, which protoc-gen-go makes the order of
+// the oneof's fields. An interface that a type implements by value is a sum type of
 // the domain, whose types implementing it through a pointer are no arms but
 // variants it reports. Any other type has none.
-func oneofArms(t types.Type) []oneofArm {
+func oneofArms(fset *token.FileSet, t types.Type) []oneofArm {
 	named, ok := types.Unalias(t).(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
 		return nil
@@ -51,8 +53,18 @@ func oneofArms(t types.Type) []oneofArm {
 		}
 		arms = append(arms, oneofArm{wrapper: wrapper, field: st.Field(0)})
 	}
-	slices.SortFunc(arms, func(a, b oneofArm) int { return cmp.Compare(a.wrapper.Obj().Pos(), b.wrapper.Obj().Pos()) })
+	slices.SortFunc(arms, func(a, b oneofArm) int { return declOrder(fset)(a.wrapper, b.wrapper) })
 	return arms
+}
+
+// declOrder orders named types as they are declared: file by file in name
+// order, and from the top of each. Positions alone do not order the files of
+// fset, as go/packages parses them concurrently.
+func declOrder(fset *token.FileSet) func(a, b *types.Named) int {
+	return func(a, b *types.Named) int {
+		pa, pb := fset.Position(a.Obj().Pos()), fset.Position(b.Obj().Pos())
+		return cmp.Or(strings.Compare(pa.Filename, pb.Filename), cmp.Compare(pa.Offset, pb.Offset))
+	}
 }
 
 // label spells the arm's field for messages, with the oneof field it belongs

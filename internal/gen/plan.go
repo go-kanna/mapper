@@ -207,7 +207,7 @@ func (p *planner) checkNamed(f *function, at site, m matched) {
 // which is all that is ever copied.
 func (p *planner) checkShared(f *function) []string {
 	_, st, _ := namedStruct(f.dst)
-	dsts := destinationNames(st)
+	dsts := destinationNames(p.fset, st)
 	var shared []string
 	for _, s := range f.decl.share {
 		i := slices.IndexFunc(dsts, func(n string) bool { return n == s.field })
@@ -219,7 +219,7 @@ func (p *planner) checkShared(f *function) []string {
 			p.diags = append(p.diags, d)
 			continue
 		}
-		if oneof, ok := armHolder(st, s.field); ok {
+		if oneof, ok := armHolder(p.fset, st, s.field); ok {
 			p.diags = append(p.diags, diag.Errorf(s.pos,
 				"%s: //kanna:%s %s names the field of an arm of the oneof %s, which is copied as the arm is",
 				f.name, shareKey, s.field, oneof))
