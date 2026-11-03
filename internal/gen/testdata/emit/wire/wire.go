@@ -229,6 +229,8 @@ func (*Contact_Postal) isContact_Kind() {}
 type Profile struct {
 	state    int
 	Nickname *string
+	Bio      *string
+	Grade    int32
 }
 
 // GetNickname reads a proto3 optional field: nil becomes "".

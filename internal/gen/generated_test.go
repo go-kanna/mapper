@@ -204,6 +204,24 @@ func TestGenerated_NilMapsAsEmpty(t *testing.T) {
 	}
 }
 
+// A nil field that no rule sees leaves the destination's zero as it is.
+func TestGenerated_NilFieldsLeaveTheZero(t *testing.T) {
+	t.Parallel()
+
+	for bio, want := range map[*string]string{nil: "", new("hi"): "hi"} {
+		p, err := mapper.ProfileFromWire(&wire.Profile{Nickname: new("kanna"), Bio: bio})
+		if err != nil || p.Bio != want {
+			t.Errorf("ProfileFromWire(bio %v) = %+v, %v, want the bio %q", bio, p, err, want)
+		}
+	}
+	g := model.MustGrade(3)
+	for grade, want := range map[*model.Grade]int32{nil: 0, &g: 3} {
+		if w := mapper.ProfileToWire(model.Profile{Grade: grade}); w.Grade != want {
+			t.Errorf("ProfileToWire(grade %v).Grade = %d, want %d", grade, w.Grade, want)
+		}
+	}
+}
+
 // nil stays nil wherever the destination can hold it, and a nil message maps
 // as an empty one.
 func TestGenerated_Nil(t *testing.T) {

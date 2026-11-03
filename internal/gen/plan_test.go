@@ -667,6 +667,34 @@ func TestPlans_MissPackagesSeenThroughAnother(t *testing.T) {
 	}
 }
 
+// A struct converts by its fields, so the package of one seen only through
+// another, as net/url is through net/http, is not loaded for it.
+func TestPlans_MissNoPackageForAStruct(t *testing.T) {
+	t.Parallel()
+
+	pkg := pkgtest.Load(t, map[string]string{"test.go": `package test
+
+import "net/http"
+
+type Request struct{ URL *Link }
+
+type Link struct{ Scheme, Host string }
+
+//kanna:mapper
+type _ interface {
+	FromHTTP(*http.Request) Request
+}
+`})
+	if got := gen.Missing(pkg); len(got) > 0 {
+		t.Errorf("missing = %q, want none", got)
+	}
+	found, _ := gen.Plans(pkg)
+	want := "  Scheme = .Scheme direct"
+	if !slices.ContainsFunc(found, func(p string) bool { return strings.Contains(p, want) }) {
+		t.Errorf("plans =\n%s\nwant a function for url.URL, containing %q", strings.Join(found, "\n"), want)
+	}
+}
+
 func TestUnexported(t *testing.T) {
 	t.Parallel()
 

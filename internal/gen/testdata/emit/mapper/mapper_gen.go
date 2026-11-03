@@ -271,9 +271,34 @@ func ProfileFromWire(src *wire.Profile) (model.Profile, error) {
 		return model.Profile{}, fmt.Errorf("map model.Profile.Nickname: %w", err)
 	}
 	v = v4
+	var v5 string
+	if v6 := src.Bio; v6 != nil {
+		v5 = *v6
+	}
+	v7, err := model.NewGrade(src.Grade)
+	if err != nil {
+		return model.Profile{}, fmt.Errorf("map model.Profile.Grade: %w", err)
+	}
 	return model.Profile{
 		Nickname: v,
+		Bio:      v5,
+		Grade:    &v7,
 	}, nil
+}
+
+// ProfileToWire maps model.Profile to *wire.Profile.
+func ProfileToWire(src model.Profile) *wire.Profile {
+	v := src.Nickname.String()
+	v2 := src.Bio
+	var v3 int32
+	if v4 := src.Grade; v4 != nil {
+		v3 = (*v4).Int32()
+	}
+	return &wire.Profile{
+		Nickname: &v,
+		Bio:      &v2,
+		Grade:    v3,
+	}
 }
 
 // addressToWire maps model.Address to *wire.Address.

@@ -142,5 +142,10 @@ func NewNickname(s string) (Nickname, error) {
 
 func (n Nickname) String() string { return n.s }
 
-// Profile needs a nickname, which the wire may leave out.
-type Profile struct{ Nickname Nickname }
+// Profile needs a nickname, which the wire may leave out. Its bio is empty
+// where the wire leaves it out, and it may have no grade, which goes out as 0.
+type Profile struct {
+	Nickname Nickname
+	Bio      string
+	Grade    *Grade
+}

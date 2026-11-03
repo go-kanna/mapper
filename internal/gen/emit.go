@@ -410,8 +410,6 @@ func keepsZero(o op) bool {
 	switch o := o.(type) {
 	case opDirect, opCast, opClone, opSlice, opMap:
 		return true
-	case opDeref:
-		return keepsZero(o.elem)
 	case opGet:
 		return keepsZero(o.elem)
 	}

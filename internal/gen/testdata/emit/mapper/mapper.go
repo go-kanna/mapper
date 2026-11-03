@@ -27,6 +27,7 @@ type _ interface {
 	ChannelFromWire(wire.Channel) (model.Channel, error)
 
 	ProfileFromWire(*wire.Profile) (model.Profile, error)
+	ProfileToWire(model.Profile) *wire.Profile
 }
 
 //kanna:converter
