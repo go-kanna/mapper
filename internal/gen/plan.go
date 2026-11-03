@@ -202,8 +202,9 @@ func (p *planner) checkNamed(f *function, at site, m matched) {
 }
 
 // checkShared returns the destination fields the //kanna:share of f names,
-// saying which of them is no field of the destination, or holds neither a
-// slice nor a map, which is all that is ever copied.
+// saying which of them is no field of the destination, the field of an arm of a
+// oneof, which is copied as the arm is, or holds neither a slice nor a map,
+// which is all that is ever copied.
 func (p *planner) checkShared(f *function) []string {
 	_, st, _ := namedStruct(f.dst)
 	dsts := destinationNames(st)
@@ -216,6 +217,12 @@ func (p *planner) checkShared(f *function) []string {
 				d = d.WithHints(fmt.Sprintf("did you mean %s?", c))
 			}
 			p.diags = append(p.diags, d)
+			continue
+		}
+		if oneof, ok := armHolder(st, s.field); ok {
+			p.diags = append(p.diags, diag.Errorf(s.pos,
+				"%s: //kanna:%s %s names the field of an arm of the oneof %s, which is copied as the arm is",
+				f.name, shareKey, s.field, oneof))
 			continue
 		}
 		obj, _, _ := types.LookupFieldOrMethod(f.dst, true, nil, s.field)

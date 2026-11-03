@@ -134,7 +134,7 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 		diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s takes no argument but %s, got %q", mapperKey, strictOption,
 			d.Args))
 	}
-	for _, key := range []string{mapKey, allowKey} {
+	for _, key := range []string{mapKey, shareKey, allowKey} {
 		m, ds := directive.Find(pkg.Fset, doc, key)
 		if diags = append(diags, ds...); m.Found {
 			diags = append(diags, diag.Errorf(m.Pos,
