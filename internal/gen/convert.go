@@ -46,9 +46,13 @@ type opConv struct{ c conv }
 // opCall calls a function of the generated file.
 type opCall struct{ f *function }
 
-// opDeref converts what a pointer points to, leaving the destination zero when
-// the pointer is nil.
-type opDeref struct{ elem op }
+// opDeref converts what a pointer points to, of type typ. A nil converts as the
+// zero value of typ, so that a rule of the destination sees it too, unless the
+// destination is a pointer, which stays nil.
+type opDeref struct {
+	typ  types.Type
+	elem op
+}
 
 // opAddr converts the value and takes the address of the result.
 type opAddr struct{ elem op }
@@ -113,6 +117,10 @@ type converter struct {
 	convs convs
 	funcs functions
 
+	// missing records a package that the conversions need in full, of which
+	// only part is loaded, for the caller to load.
+	missing func(*types.Package)
+
 	// share hands a slice or a map of the same type on as it is, rather than a
 	// copy, for a field that //kanna:share or map:",share" names.
 	share bool
@@ -138,6 +146,9 @@ func (c converter) op(src, dst types.Type) (op, bool) {
 // that nil stays nil rather than becoming a pointer to a zero value. When the
 // source pointer reaches a pointer destination through a function taking the
 // pointer itself, it is handed on only when it is not nil, for the same reason.
+//
+// A type that converts by what its package declares beside it, of which only
+// part is loaded, converts by nothing until its package is loaded in full.
 func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	src, dst = types.Unalias(src), types.Unalias(dst)
 	if types.Identical(src, dst) {
@@ -153,7 +164,7 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	sp, srcPtr := src.(*types.Pointer)
 	if srcPtr {
 		if e, ok := c.try(sp.Elem(), dst, false); ok {
-			return opDeref{e}, true
+			return opDeref{typ: sp.Elem(), elem: e}, true
 		}
 	}
 	if dp, ok := dst.(*types.Pointer); ok {
@@ -162,6 +173,13 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 				return opGuard{opAddr{e}}, true
 			}
 			return opAddr{e}, true
+		}
+	}
+
+	for _, t := range []types.Type{src, dst} {
+		if pkg, ok := partial(t); ok {
+			c.missing(pkg)
+			return nil, false
 		}
 	}
 
@@ -227,6 +245,24 @@ func (c converter) same(t types.Type) op {
 		return opClone{pkg: "maps"}
 	}
 	return opDirect{}
+}
+
+// partial returns the package declaring t when t converts by what the package
+// declares beside it, and only part of the package is loaded: the export data
+// of a package seen only through another carries the types it refers to, but
+// not necessarily the constants and the constructors beside them. A string type
+// may be an enum of kanna-value, whose constants are among those.
+func partial(t types.Type) (*types.Package, bool) {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Complete() {
+		return nil, false
+	}
+	_, value := valuetype.Of(named)
+	_, proto := protoEnum(named)
+	if !value && !proto && !types.Identical(named.Underlying(), types.Typ[types.String]) {
+		return nil, false
+	}
+	return named.Obj().Pkg(), true
 }
 
 // callable reports whether code in pkg can make a value of v, a value type of

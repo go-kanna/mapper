@@ -2,6 +2,7 @@ package gen_test
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"reflect"
 	"strings"
@@ -185,8 +186,44 @@ func TestGenerated_RoundTrip(t *testing.T) {
 	}
 }
 
+// A nil maps as the empty value it points to would, wherever the destination
+// cannot hold a nil, so that a rule sees it: the message and an optional field
+// alike.
+func TestGenerated_NilMapsAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []*wire.Profile{nil, {}} {
+		if _, err := mapper.ProfileFromWire(in); err == nil ||
+			!strings.HasPrefix(err.Error(), "map model.Profile.Nickname: rule: nickname") {
+			t.Errorf("ProfileFromWire(%v) error = %v, want the nickname's rule to reject it", in, err)
+		}
+	}
+	p, err := mapper.ProfileFromWire(&wire.Profile{Nickname: new("kanna")})
+	if err != nil || p.Nickname.String() != "kanna" {
+		t.Errorf("ProfileFromWire(kanna) = %+v, %v, want the nickname kanna", p, err)
+	}
+}
+
+// A nil field that no rule sees leaves the destination's zero as it is.
+func TestGenerated_NilFieldsLeaveTheZero(t *testing.T) {
+	t.Parallel()
+
+	for bio, want := range map[*string]string{nil: "", new("hi"): "hi"} {
+		p, err := mapper.ProfileFromWire(&wire.Profile{Nickname: new("kanna"), Bio: bio})
+		if err != nil || p.Bio != want {
+			t.Errorf("ProfileFromWire(bio %v) = %+v, %v, want the bio %q", bio, p, err, want)
+		}
+	}
+	g := model.MustGrade(3)
+	for grade, want := range map[*model.Grade]int32{nil: 0, &g: 3} {
+		if w := mapper.ProfileToWire(model.Profile{Grade: grade}); w.Grade != want {
+			t.Errorf("ProfileToWire(grade %v).Grade = %d, want %d", grade, w.Grade, want)
+		}
+	}
+}
+
 // nil stays nil wherever the destination can hold it, and a nil message maps
-// to the zero value.
+// as an empty one.
 func TestGenerated_Nil(t *testing.T) {
 	t.Parallel()
 
@@ -206,8 +243,9 @@ func TestGenerated_Nil(t *testing.T) {
 	}
 
 	got, err := mapper.EmployeeFromWire(nil)
-	if err != nil || !reflect.DeepEqual(got, model.Employee{}) {
-		t.Errorf("EmployeeFromWire(nil) = %+v, %v, want the zero value", got, err)
+	want, wantErr := mapper.EmployeeFromWire(&wire.Employee{})
+	if fmt.Sprint(err) != fmt.Sprint(wantErr) || !reflect.DeepEqual(got, want) {
+		t.Errorf("EmployeeFromWire(nil) = %+v, %v, want what an empty message maps to, %+v, %v", got, err, want, wantErr)
 	}
 
 	// AsTime makes a missing timestamp the Unix epoch, as the README says,

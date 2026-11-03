@@ -95,7 +95,7 @@ func EmployeeToProto(src model.Employee) *employeev1.Employee {
 // EmployeeFromProto maps *employeev1.Employee to model.Employee.
 func EmployeeFromProto(src *employeev1.Employee) (model.Employee, error) {
 	if src == nil {
-		return model.Employee{}, nil
+		src = new(employeev1.Employee)
 	}
 	v, err := uuid.Parse(src.GetId())
 	if err != nil {
@@ -248,10 +248,12 @@ A struct mapped to several types may carry a tag naming a field only some of the
 destination's fields is no error by itself. When a destination field has no source and a source field's tag nearly names
 it, the error points the tag out.
 
-Where a source declares a getter, as protoc-gen-go writes them, it is read through it, `src.GetName()`, so that a nil
-message reads as empty. A getter that turns a nil pointer into a zero value is passed over for the field itself,
-unless its result is already the destination's type, so that a field left unset stays zero rather than being converted
-from an empty value.
+A nil source maps as an empty one would, so that the rules of the destination see that it is missing: a function
+given a nil message maps a new empty one, and a nil pointer field converts as the zero value it points to. Only a
+destination that is a pointer itself stays nil. Where a source declares a getter, as protoc-gen-go writes them, it is
+read through it, `src.GetName()`. A getter that turns a nil pointer into a zero value is passed over for the field
+itself, unless its result is already the destination's type, so that a field left unset stays nil where the
+destination is a pointer.
 
 ### Fields you cannot tag
 
@@ -307,7 +309,7 @@ Each field takes the first case that applies.
 |---------------------------------------------------------------|------------------------------------------------------|
 | identical types                                               | assigned as is; a slice or a map copied              |
 | a declared function or a listed conversion for the pair       | that function is called                              |
-| the source is a pointer                                       | dereferenced; nil leaves the destination zero        |
+| the source is a pointer                                       | dereferenced; nil converts as the zero value         |
 | the destination is a pointer                                  | the address of the converted value                   |
 | the source is a value type of kanna-value                     | what its accessor returns, converted                 |
 | the destination is a value type of kanna-value                | its constructor called with the converted value      |
@@ -385,7 +387,7 @@ func TodoToProto(src model.Todo) *todov1.Todo {
 // TodoFromProto maps *todov1.Todo to model.Todo.
 func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 	if src == nil {
-		return model.Todo{}, nil
+		src = new(todov1.Todo)
 	}
 	var v *model.CompletedAt
 	if v2 := src.GetCompletedAt(); v2 != nil {
@@ -410,9 +412,9 @@ A value type is known by the shape kanna-value gives it, not by reading its `//k
 only the types of the package declaring it: a struct with one unexported field, a method named after the field's type
 returning it (`Time` for a `time.Time`, `String` for a `string`), and `NewX(T) (X, error)` beside it. A function listed
 for the pair is called instead, as for any other type. An unexported value type of another package cannot be made
-here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. So is a value type
-whose package this one sees only through another, whose export data carries the type without its constructor; list
-the constructor, such as `deep.NewLevel`, which brings the package in.
+here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. A value type whose
+package this one sees only through another is made the same way: the export data it is seen through carries the type
+without its constructor, so kanna-mapper loads the package declaring it too.
 
 ## Enums
 
@@ -481,7 +483,9 @@ to a pointer. The other way, the enum is a string already, and converts as it is
 
 An enum of protobuf is known by the shape protoc-gen-go gives it, an `int32` with an `Enum` method, and an enum of
 kanna-value by a string type with constants beside it, as kanna-mapper may see only the types of the package declaring
-it. A function listed for the pair is called instead, as for any other type.
+it. An enum whose package this one sees only through another is known as a value type is, once its package is loaded
+too: the export data it is seen through need not carry its constants and its constructor. A function listed for the
+pair is called instead, as for any other type.
 
 ## Protobuf oneofs
 

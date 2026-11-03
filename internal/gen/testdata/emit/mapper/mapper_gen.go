@@ -106,7 +106,7 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 // EmployeeFromWire maps *wire.Employee to model.Employee.
 func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 	if e == nil {
-		return model.Employee{}, nil
+		e = new(wire.Employee)
 	}
 	v, err := netip.ParseAddr(e.GetId())
 	if err != nil {
@@ -256,6 +256,51 @@ func ChannelFromWire(src wire.Channel) (model.Channel, error) {
 	return "", fmt.Errorf("model.Channel has no value for %v", src)
 }
 
+// ProfileFromWire maps *wire.Profile to model.Profile.
+func ProfileFromWire(src *wire.Profile) (model.Profile, error) {
+	if src == nil {
+		src = new(wire.Profile)
+	}
+	var v model.Nickname
+	var v2 string
+	if v3 := src.Nickname; v3 != nil {
+		v2 = *v3
+	}
+	v4, err := model.NewNickname(v2)
+	if err != nil {
+		return model.Profile{}, fmt.Errorf("map model.Profile.Nickname: %w", err)
+	}
+	v = v4
+	var v5 string
+	if v6 := src.Bio; v6 != nil {
+		v5 = *v6
+	}
+	v7, err := model.NewGrade(src.Grade)
+	if err != nil {
+		return model.Profile{}, fmt.Errorf("map model.Profile.Grade: %w", err)
+	}
+	return model.Profile{
+		Nickname: v,
+		Bio:      v5,
+		Grade:    &v7,
+	}, nil
+}
+
+// ProfileToWire maps model.Profile to *wire.Profile.
+func ProfileToWire(src model.Profile) *wire.Profile {
+	v := src.Nickname.String()
+	v2 := src.Bio
+	var v3 int32
+	if v4 := src.Grade; v4 != nil {
+		v3 = (*v4).Int32()
+	}
+	return &wire.Profile{
+		Nickname: &v,
+		Bio:      &v2,
+		Grade:    v3,
+	}
+}
+
 // addressToWire maps model.Address to *wire.Address.
 func addressToWire(src model.Address) *wire.Address {
 	return &wire.Address{
@@ -302,7 +347,7 @@ func cashToWire(src model.Cash) *wire.Cash {
 // addressToModel maps *wire.Address to model.Address.
 func addressToModel(src *wire.Address) model.Address {
 	if src == nil {
-		return model.Address{}
+		src = new(wire.Address)
 	}
 	return model.Address{
 		City: src.GetCity(),
@@ -312,7 +357,7 @@ func addressToModel(src *wire.Address) model.Address {
 // contactToModel maps *wire.Contact to model.Contact.
 func contactToModel(src *wire.Contact) model.Contact {
 	if src == nil {
-		return model.Contact{}
+		src = new(wire.Contact)
 	}
 	dst := model.Contact{}
 	switch v := src.GetKind().(type) {
@@ -331,7 +376,7 @@ func contactToModel(src *wire.Contact) model.Contact {
 // bankToModel maps *wire.Bank to model.Bank.
 func bankToModel(src *wire.Bank) model.Bank {
 	if src == nil {
-		return model.Bank{}
+		src = new(wire.Bank)
 	}
 	return model.Bank{
 		Account: src.Account,
@@ -341,7 +386,7 @@ func bankToModel(src *wire.Bank) model.Bank {
 // cashToModel maps *wire.Cash to model.Cash.
 func cashToModel(src *wire.Cash) model.Cash {
 	if src == nil {
-		return model.Cash{}
+		src = new(wire.Cash)
 	}
 	return model.Cash{
 		Office: src.Office,

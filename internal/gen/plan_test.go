@@ -622,7 +622,8 @@ type _ interface {
 func TestPlans_ValueTypes(t *testing.T) {
 	t.Parallel()
 
-	found, diags := gen.Plans(loadAll(t, "./testdata/checked").Packages[0])
+	// Package deep is loaded too, as a run loads it.
+	found, diags := gen.Plans(find(t, loadAll(t, "./testdata/checked", "./testdata/checked/deep"), "checked"))
 
 	want := []string{
 		"TodoFromRow(src checked.TodoRow) checked.Todo\n" +
@@ -630,7 +631,7 @@ func TestPlans_ValueTypes(t *testing.T) {
 		"SessionFromRow(src checked.SessionRow) checked.Session (fallible)",
 		"PageToLink(src checked.Page) checked.Link\n  URL = .URL get:String(conv:url.Parse)",
 		"OddsFromRow(src checked.OddRow) checked.Odds (fallible)",
-		"HolderFromRow(src checked.LevelRow) mid.Holder (fallible)",
+		"HolderFromRow(src checked.LevelRow) mid.Holder (fallible)\n  Level = .Level new:deep.NewLevel(direct)",
 	}
 	if !slices.Equal(found, want) {
 		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
@@ -644,11 +645,6 @@ func TestPlans_ValueTypes(t *testing.T) {
 		// function that does convert is hinted at.
 		"checked.go:122:2: error: OddsFromRow: cannot map checked.OddRow.N (int) to checked.Odds.N (checked.Odd)\n" +
 			"  NewOdd converts it; add it to a //kanna:converter list",
-		// Package deep is seen only through package mid, without NewLevel.
-		"checked.go:123:2: error: HolderFromRow: cannot map checked.LevelRow.Level (int) to mid.Holder.Level (deep.Level)\n" +
-			"  add a func(int) deep.Level to a //kanna:converter list\n" +
-			"  a value type of kanna-value is made by deep.NewLevel(int) (deep.Level, error), " +
-			"which this package does not see; list it in a //kanna:converter list",
 		"checked.go:116:2: error: TodoFromRow has to return an error:" +
 			" CompletedAt is made by checked.NewCompletedAt, which can fail\n" +
 			"  declare it as TodoFromRow(checked.TodoRow) (checked.Todo, error)",
@@ -657,6 +653,45 @@ func TestPlans_ValueTypes(t *testing.T) {
 	}
 	if !slices.EqualFunc(diags, wantDiags, strings.HasSuffix) {
 		t.Errorf("diagnostics =\n%s\nwant ones ending in\n%s", strings.Join(diags, "\n"), strings.Join(wantDiags, "\n"))
+	}
+}
+
+// A value type is made by its constructor, which the export data of a package
+// seen only through another need not carry: that package is to be loaded.
+func TestPlans_MissPackagesSeenThroughAnother(t *testing.T) {
+	t.Parallel()
+
+	got := gen.Missing(loadAll(t, "./testdata/checked").Packages[0])
+	if want := []string{"github.com/go-kanna/mapper/internal/gen/testdata/checked/deep"}; !slices.Equal(got, want) {
+		t.Errorf("missing = %q, want %q", got, want)
+	}
+}
+
+// A struct converts by its fields, so the package of one seen only through
+// another, as net/url is through net/http, is not loaded for it.
+func TestPlans_MissNoPackageForAStruct(t *testing.T) {
+	t.Parallel()
+
+	pkg := pkgtest.Load(t, map[string]string{"test.go": `package test
+
+import "net/http"
+
+type Request struct{ URL *Link }
+
+type Link struct{ Scheme, Host string }
+
+//kanna:mapper
+type _ interface {
+	FromHTTP(*http.Request) Request
+}
+`})
+	if got := gen.Missing(pkg); len(got) > 0 {
+		t.Errorf("missing = %q, want none", got)
+	}
+	found, _ := gen.Plans(pkg)
+	want := "  Scheme = .Scheme direct"
+	if !slices.ContainsFunc(found, func(p string) bool { return strings.Contains(p, want) }) {
+		t.Errorf("plans =\n%s\nwant a function for url.URL, containing %q", strings.Join(found, "\n"), want)
 	}
 }
 
