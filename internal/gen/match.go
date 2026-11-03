@@ -116,8 +116,29 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 			out.pairs = append(out.pairs, fieldPair{dst: f, src: sf, named: hasEntry || tag != "" || sf.tag == f.Name()})
 		}
 	}
+	m.misspelledTags(sources, dstStruct, out.pairs)
 
 	return out, m.diags
+}
+
+// misspelledTags warns about a map tag of sources that names no field of dst
+// but is a typo away from one that pairs found a source for: the tag was
+// probably meant for it, and is hidden by the source it found. A destination
+// field with no source points out such a tag in its error instead. A source
+// mapped to several destinations may name a field only some of them have, so
+// only a name like one of dst's is taken for a mistake.
+func (m *matching) misspelledTags(sources []sourceField, dst *types.Struct, pairs []fieldPair) {
+	names := destinationNames(m.fset, dst)
+	for _, sf := range sources {
+		if sf.tag == "" || sf.via != nil || slices.Contains(names, sf.tag) {
+			continue
+		}
+		s, ok := suggest.Closest(sf.tag, names)
+		if ok && slices.ContainsFunc(pairs, func(p fieldPair) bool { return p.dst.Name() == s }) {
+			m.diags = append(m.diags, diag.Warningf(m.pos(sf.v), "map tag %q on %s.%s names no field of %s",
+				sf.tag, structLabel(m.src), sf.v.Name(), structLabel(m.dst)).WithHints(fmt.Sprintf("did you mean %q?", s)))
+		}
+	}
 }
 
 // sourceFields lists the exported fields of st that take part in mapping,
