@@ -339,7 +339,7 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 
 ## Enum
 
-[kanna-value の enum](https://github.com/go-kanna/value#enums)（定数の値だけを取る string 型）は、定数の名前によって protobuf の enum と相互にマッピングされます。比較するのは、Go の定数では型名より後の部分（`OrderStatusPlaced` の `Placed`）、protobuf の値では enum 名より後の部分（`ORDER_STATUS_PLACED` の `PLACED`）で、大文字小文字とアンダースコアの違いは無視します。これで一致しない定数は、その enum のすべての定数が共通して持つ先頭の語より後の部分で比較します（`APNsProduction` と並ぶ `APNsSandbox` の `Sandbox`）。方向ごとに関数が 1 つ生成されます:
+[kanna-value の enum](https://github.com/go-kanna/value#enums)（定数の値だけを取る string 型）は、定数の名前によって protobuf の enum と相互にマッピングされます。比較するのは、Go の定数では型名より後の部分（`OrderStatusPlaced` の `Placed`）、protobuf の値では enum 名より後の部分（`ORDER_STATUS_PLACED` の `PLACED`）で、大文字小文字とアンダースコアの違いは無視します。型名で始まらない定数は、名前全体で比較します。型 `APNsEnvironment` の `APNsSandbox` は `APNS_SANDBOX` と一致し、`SANDBOX` と一致するのは `APNsEnvironmentSandbox` です。方向ごとに関数が 1 つ生成されます:
 
 ```go
 // orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.
@@ -369,7 +369,8 @@ protobuf にあってドメインにない値や、誰も宣言していない�
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
-  add ORDER_STATUS_REFUNDED to it, or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
+  add ORDER_STATUS_REFUNDED to it
+  or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
 ```
 
 どちらの関数も、`//kanna:mapper` インターフェースに宣言すれば、書いた名前とシグネチャで自分で呼び出せます。宣言した関数は、上で生成される関数の代わりに、その組のすべてのフィールドで使われます:

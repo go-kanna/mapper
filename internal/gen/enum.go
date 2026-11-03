@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/constant"
 	"go/types"
-	"slices"
 	"strings"
 	"unicode"
 
@@ -83,7 +82,6 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 	}
 
 	goConsts := enumtype.Constants(goEnum.Named, p.fset)
-	shared := sharedPrefix(goConsts)
 	ep := &enumPlan{}
 	matched := make(map[int64]*types.Const) // the constant of kanna-value for each number
 	for _, c := range goConsts {
@@ -92,14 +90,14 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		}
 		pc, ok := byKey[goKey(goEnum.Named, c)]
 		if !ok {
-			pc, ok = byKey[normalize(goName(goEnum.Named, c, shared))]
-		}
-		if !ok {
-			p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s has no counterpart in %s",
+			d := diag.Errorf(at.pos, "%s: %s has no counterpart in %s",
 				at.path, qualifiedName(c, labelQualifier), typeLabel(proto)).
-				WithHints(fmt.Sprintf("add %s to it, or list a func(%s) %s in a //kanna:%s list",
-					protoName(proto, protoConsts, goName(goEnum.Named, c, shared)), typeLabel(f.src), resultLabel(f),
-					converterKey)))
+				WithHints("add " + protoName(proto, protoConsts, goName(goEnum.Named, c)) + " to it")
+			if name, value, ok := renamed(goEnum.Named, c, byKey); ok {
+				d = d.WithHints(fmt.Sprintf("or name it %s, after its type, to match %s", name, protoValue(proto, value)))
+			}
+			p.diags = append(p.diags, d.WithHints(fmt.Sprintf("or list a func(%s) %s in a //kanna:%s list",
+				typeLabel(f.src), resultLabel(f), converterKey)))
 			continue
 		}
 		if out {
@@ -159,43 +157,39 @@ func number(c *types.Const) int64 {
 // matched by: its name past the type's, such as Placed for OrderStatusPlaced,
 // in lower case.
 func goKey(named *types.Named, c *types.Const) string {
-	return normalize(goName(named, c, ""))
+	return normalize(goName(named, c))
 }
 
 // goName returns the name of c, a constant of the enum of kanna-value named, past
-// the type's name, or else past shared: Placed for OrderStatusPlaced, and Sandbox
-// for APNsSandbox of the type APNsEnvironment, with APNs shared.
-func goName(named *types.Named, c *types.Const, shared string) string {
-	for _, prefix := range []string{named.Obj().Name(), shared} {
-		if rest, ok := strings.CutPrefix(c.Name(), prefix); ok && rest != "" {
-			return rest
-		}
+// the type's name, Placed for OrderStatusPlaced, or the whole of it for a
+// constant not named after its type. What the constants share, APNs of
+// APNsSandbox and APNsProduction, stays in: taken off, adding APNS_SANDBOX would
+// move APNsSandbox off SANDBOX without a word.
+func goName(named *types.Named, c *types.Const) string {
+	if rest, ok := strings.CutPrefix(c.Name(), named.Obj().Name()); ok && rest != "" {
+		return rest
 	}
 	return c.Name()
 }
 
-// sharedPrefix returns the whole words every constant of consts starts with, APNs
-// of APNsSandbox and APNsProduction, which tell none of them apart. A lone
-// constant has nothing to share them with, so it gives "".
-func sharedPrefix(consts []*types.Const) string {
-	if len(consts) < 2 {
-		return ""
+// renamed suggests a name after its type for c, a constant of the enum of
+// kanna-value named that matches nothing, from the most words its name ends with
+// that match a value of byKey: APNsEnvironmentSandbox for APNsSandbox, to match
+// SANDBOX.
+func renamed(named *types.Named, c *types.Const, byKey map[string]*types.Const) (string, *types.Const, bool) {
+	if strings.HasPrefix(c.Name(), named.Obj().Name()) {
+		return "", nil, false
 	}
-	prefix := []rune(consts[0].Name())
-	for _, c := range consts[1:] {
-		name := []rune(c.Name())
-		n := 0
-		for n < min(len(prefix), len(name)) && prefix[n] == name[n] {
-			n++
+	r := []rune(c.Name())
+	for i := range r {
+		if !wordStart(r, i) {
+			continue
 		}
-		prefix = prefix[:n]
-	}
-	for n := len(prefix); n > 0; n-- {
-		if !slices.ContainsFunc(consts, func(c *types.Const) bool { return !wordStart([]rune(c.Name()), n) }) {
-			return string(prefix[:n])
+		if pc, ok := byKey[normalize(string(r[i:]))]; ok {
+			return named.Obj().Name() + string(r[i:]), pc, true
 		}
 	}
-	return ""
+	return "", nil, false
 }
 
 // wordStart reports whether a word of the Go name r starts at i, past its first:

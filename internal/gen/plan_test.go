@@ -269,7 +269,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"type S struct{ Status Status }\ntype D struct{ Status State }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:25:2: error: F: Status: test.StatusRefunded has no counterpart in test.State\n" +
-				"  add STATE_REFUNDED to it, or list a func(test.Status) test.State in a //kanna:converter list",
+				"  add STATE_REFUNDED to it\n  or list a func(test.Status) test.State in a //kanna:converter list",
 		},
 		{
 			name: "an enum coming back from protobuf",
@@ -423,9 +423,9 @@ type _ interface {
 	}
 }
 
-// A constant matching nothing past the name of its type is compared past the
-// words every constant of its enum starts with, which tell none of them apart.
-func TestPlans_EnumsSharingAPrefix(t *testing.T) {
+// A constant not named after its type is matched by the whole of its name: what
+// the constants of its enum start with stays in.
+func TestPlans_EnumNamesNotAfterTheType(t *testing.T) {
 	t.Parallel()
 
 	const wire = `
@@ -445,7 +445,7 @@ type _ interface {
 	EnvToPB(Env) EnvPB
 }
 `
-	const other = "  else -> EnvPB_ENV_PB_UNSPECIFIED"
+	const list = "\n  or list a func(test.Env) test.EnvPB in a //kanna:converter list"
 
 	tests := []struct {
 		name, src string
@@ -453,40 +453,41 @@ type _ interface {
 		diag      string
 	}{
 		{
-			name: "the first word of the type",
+			name: "the whole name matches",
+			src:  "type Env string\n\nconst (\n\tSandbox Env = \"a\"\n\tDeepSandbox Env = \"b\"\n)\n",
+			want: []string{
+				"  Sandbox -> EnvPB_ENV_PB_SANDBOX", "  DeepSandbox -> EnvPB_ENV_PB_DEEP_SANDBOX",
+				"  else -> EnvPB_ENV_PB_UNSPECIFIED",
+			},
+		},
+		{
+			name: "what the constants share stays in",
+			src:  "type Env string\n\nconst (\n\tAPNsSandbox Env = \"a\"\n\tAPNsStaging Env = \"b\"\n)\n",
+			diag: "EnvToPB: test.APNsSandbox has no counterpart in test.EnvPB\n  add ENV_PB_AP_NS_SANDBOX to it" +
+				"\n  or name it EnvSandbox, after its type, to match ENV_PB_SANDBOX" + list,
+		},
+		{
+			name: "a word the type starts with too",
 			src: "type APNsEnv string\n\nconst (\n\tAPNsSandbox APNsEnv = \"a\"\n\tAPNsStaging APNsEnv = \"b\"\n)\n" +
 				"type Env = APNsEnv\n",
-			want: []string{"  APNsSandbox -> EnvPB_ENV_PB_SANDBOX", "  APNsStaging -> EnvPB_ENV_PB_STAGING", other},
+			diag: "EnvToPB: test.APNsStaging has no counterpart in test.EnvPB\n  add ENV_PB_AP_NS_STAGING to it" +
+				"\n  or name it APNsEnvStaging, after its type, to match ENV_PB_STAGING" + list,
 		},
 		{
-			name: "the last word of the type",
-			src:  "type Env string\n\nconst (\n\tStageSandbox Env = \"a\"\n\tStageStaging Env = \"b\"\n)\n",
-			want: []string{"  StageSandbox -> EnvPB_ENV_PB_SANDBOX", "  StageStaging -> EnvPB_ENV_PB_STAGING", other},
+			name: "the most words",
+			src:  "type Env string\n\nconst StageDeepSandbox Env = \"a\"\n",
+			diag: "EnvToPB: test.StageDeepSandbox has no counterpart in test.EnvPB\n  add ENV_PB_STAGE_DEEP_SANDBOX to it" +
+				"\n  or name it EnvDeepSandbox, after its type, to match ENV_PB_DEEP_SANDBOX" + list,
 		},
 		{
-			name: "a name matching as it is comes first",
-			src:  "type Env string\n\nconst (\n\tDeepSandbox Env = \"a\"\n\tDeepStaging Env = \"b\"\n)\n",
-			want: []string{"  DeepSandbox -> EnvPB_ENV_PB_DEEP_SANDBOX", "  DeepStaging -> EnvPB_ENV_PB_STAGING", other},
+			name: "no words to match",
+			src:  "type Env string\n\nconst APNsDevelopment Env = \"a\"\n",
+			diag: "EnvToPB: test.APNsDevelopment has no counterpart in test.EnvPB\n  add ENV_PB_AP_NS_DEVELOPMENT to it" + list,
 		},
 		{
-			name: "letters in common are no word in common",
-			src:  "type Env string\n\nconst (\n\tSandbox Env = \"a\"\n\tStaging Env = \"b\"\n)\n",
-			want: []string{"  Sandbox -> EnvPB_ENV_PB_SANDBOX", "  Staging -> EnvPB_ENV_PB_STAGING", other},
-		},
-		{
-			name: "what the words leave has to match whole",
-			src:  "type Env string\n\nconst (\n\tNotSandbox Env = \"a\"\n\tSandbox Env = \"b\"\n)\n",
-			diag: "EnvToPB: test.NotSandbox has no counterpart in test.EnvPB\n  add ENV_PB_NOT_SANDBOX to it",
-		},
-		{
-			name: "no constant to compare it with",
-			src:  "type Env string\n\nconst StageSandbox Env = \"a\"\n",
-			diag: "EnvToPB: test.StageSandbox has no counterpart in test.EnvPB\n  add ENV_PB_STAGE_SANDBOX to it",
-		},
-		{
-			name: "the hint leaves the shared words out",
-			src:  "type Env string\n\nconst (\n\tAPNsSandbox Env = \"a\"\n\tAPNsDevelopment Env = \"b\"\n)\n",
-			diag: "EnvToPB: test.APNsDevelopment has no counterpart in test.EnvPB\n  add ENV_PB_DEVELOPMENT to it",
+			name: "a constant named after its type",
+			src:  "type Env string\n\nconst EnvStageSandbox Env = \"a\"\n",
+			diag: "EnvToPB: test.EnvStageSandbox has no counterpart in test.EnvPB\n  add ENV_PB_STAGE_SANDBOX to it" + list,
 		},
 	}
 	for _, tt := range tests {
@@ -496,8 +497,8 @@ type _ interface {
 			found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + wire}))
 
 			if tt.diag != "" {
-				if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.diag) }) {
-					t.Errorf("diagnostics = %q, want one containing %q", diags, tt.diag)
+				if !slices.ContainsFunc(diags, func(d string) bool { return strings.HasSuffix(d, tt.diag) }) {
+					t.Errorf("diagnostics = %q, want one ending in %q", diags, tt.diag)
 				}
 				return
 			}
