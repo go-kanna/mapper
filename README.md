@@ -422,8 +422,9 @@ without its constructor, so kanna-mapper loads the package declaring it too.
 An [enum of kanna-value](https://github.com/go-kanna/value#enums), a string type whose values are its constants, maps to
 and from an enum of protobuf by the names of their constants: the Go constant's past its type's, `Placed` in
 `OrderStatusPlaced`, and the protobuf value's past its enum's, `PLACED` in `ORDER_STATUS_PLACED`, compared regardless of
-case and underscores. A constant that matches nothing so is compared past the words all the constants of its enum start
-with: `Sandbox` in `APNsSandbox`, beside `APNsProduction`. A function is written for each direction:
+case and underscores. A constant not named after its type is compared by the whole of its name: `APNsSandbox` of the
+type `APNsEnvironment` matches `APNS_SANDBOX`, and `APNsEnvironmentSandbox` matches `SANDBOX`. A function is written for
+each direction:
 
 ```go
 // orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.
@@ -456,7 +457,8 @@ and protobuf does not stops generation instead:
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
-  add ORDER_STATUS_REFUNDED to it, or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
+  add ORDER_STATUS_REFUNDED to it
+  or list a func(model.OrderStatus) orderv1.OrderStatus in a //kanna:converter list
 ```
 
 Declare either function in a `//kanna:mapper` interface to call it yourself, under the name and signature you give it.
