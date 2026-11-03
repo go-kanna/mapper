@@ -238,6 +238,11 @@ func TestDecls_Diagnostics(t *testing.T) {
 			want: "test.go:4:1: error: //kanna:allow goes above a method of the interface, not the interface",
 		},
 		{
+			name: "//kanna:share on the interface",
+			src:  "//kanna:mapper\n//kanna:share Tags\ntype _ interface{ F(P) (S, error) }\n",
+			want: "test.go:4:1: error: //kanna:share goes above a method of the interface, not the interface",
+		},
+		{
 			name: "//kanna:allow saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow\n\tF(P) (S, error)\n}\n",
 			want: `test.go:5:2: error: //kanna:allow takes unspecified, got ""`,
