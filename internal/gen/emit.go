@@ -64,8 +64,14 @@ func (e *emitter) function() {
 		result = "(" + dstT + ", error)"
 	}
 	fmt.Fprintf(&e.b, "func %s(%s %s) %s {\n", fn.name, e.src, srcT, result)
-	if _, ok := types.Unalias(fn.src).(*types.Pointer); ok {
-		fmt.Fprintf(&e.b, "if %s == nil {\nreturn %s\n}\n", e.src, e.ret(e.zero))
+	if sp, ok := types.Unalias(fn.src).(*types.Pointer); ok {
+		// A nil maps as an empty value would, so that the rules of the
+		// destination see it, unless the destination can be nil itself.
+		if amp != "" {
+			fmt.Fprintf(&e.b, "if %s == nil {\nreturn %s\n}\n", e.src, e.ret(e.zero))
+		} else {
+			fmt.Fprintf(&e.b, "if %s == nil {\n%s = new(%s)\n}\n", e.src, e.src, e.typ(sp.Elem()))
+		}
 	}
 
 	values := make([]string, len(e.pl.fields))
@@ -356,10 +362,16 @@ func (e *emitter) assign(target string, o op, val string, dstT types.Type, field
 
 	switch o := o.(type) {
 	case opDeref:
-		v := e.s.Name("v")
-		fmt.Fprintf(&e.b, "if %s := %s; %s != nil {\n", v, val, v)
-		e.assign(target, o.elem, "*"+v, dstT, field)
-		e.b.WriteString("}\n")
+		if _, ptr := types.Unalias(dstT).(*types.Pointer); ptr || keepsZero(o.elem) {
+			v := e.s.Name("v")
+			fmt.Fprintf(&e.b, "if %s := %s; %s != nil {\n", v, val, v)
+			e.assign(target, o.elem, "*"+v, dstT, field)
+			e.b.WriteString("}\n")
+			return
+		}
+		x, v := e.s.Name("v"), e.s.Name("v")
+		fmt.Fprintf(&e.b, "var %s %s\nif %s := %s; %s != nil {\n%s = *%s\n}\n", x, e.typ(o.typ), v, val, v, x, v)
+		e.assign(target, o.elem, x, dstT, field)
 	case opGuard:
 		v := e.s.Name("v")
 		fmt.Fprintf(&e.b, "if %s := %s; %s != nil {\n", v, val, v)
@@ -389,6 +401,21 @@ func (e *emitter) assign(target string, o op, val string, dstT types.Type, field
 		e.assign(target+"["+k+"]", o.elem, x, elemT, field)
 		e.b.WriteString("}\n}\n")
 	}
+}
+
+// keepsZero reports whether o makes the zero value of what it converts the
+// zero value of what it converts to, so that a nil left unconverted ends where
+// converting the zero value would.
+func keepsZero(o op) bool {
+	switch o := o.(type) {
+	case opDirect, opCast, opClone, opSlice, opMap:
+		return true
+	case opDeref:
+		return keepsZero(o.elem)
+	case opGet:
+		return keepsZero(o.elem)
+	}
+	return false
 }
 
 // dstOneof writes the chain that sets the oneof o of dst from the first of its

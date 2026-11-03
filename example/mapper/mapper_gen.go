@@ -31,7 +31,7 @@ func EmployeeToProto(emp model.Employee) *employeev1.Employee {
 // id is not a UUID.
 func EmployeeFromProto(emp *employeev1.Employee) (model.Employee, error) {
 	if emp == nil {
-		return model.Employee{}, nil
+		emp = new(employeev1.Employee)
 	}
 	v, err := uuid.Parse(emp.GetId())
 	if err != nil {
@@ -70,7 +70,7 @@ func contactToEmployeev1(src model.Contact) *employeev1.Contact {
 // addressToModel maps *employeev1.Address to model.Address.
 func addressToModel(src *employeev1.Address) model.Address {
 	if src == nil {
-		return model.Address{}
+		src = new(employeev1.Address)
 	}
 	return model.Address{
 		City:   src.GetCity(),
@@ -81,7 +81,7 @@ func addressToModel(src *employeev1.Address) model.Address {
 // contactToModel maps *employeev1.Contact to model.Contact.
 func contactToModel(src *employeev1.Contact) model.Contact {
 	if src == nil {
-		return model.Contact{}
+		src = new(employeev1.Contact)
 	}
 	dst := model.Contact{}
 	switch v := src.GetKind().(type) {

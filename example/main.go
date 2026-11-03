@@ -52,12 +52,11 @@ func main() {
 	fmt.Fprintf(os.Stdout, "oneof:     email=%s postal set=%t back email=%s postal nil=%t\n",
 		wire.GetContact().GetEmail(), wire.GetContact().GetPostal() != nil, *back.Contact.Email, back.Contact.Postal == nil)
 
-	// A nil message maps to the zero value rather than panicking.
-	empty, err := mapper.EmployeeFromProto(nil)
-	if err != nil {
-		panic(err)
+	// A nil message maps as an empty one does, rather than panicking, so it
+	// is reported for the id it lacks.
+	if _, err := mapper.EmployeeFromProto(nil); err != nil {
+		fmt.Fprintln(os.Stdout, "from nil: ", err)
 	}
-	fmt.Fprintf(os.Stdout, "from nil:  zero value: %t\n", empty.ID == uuid.Nil() && empty.FullName == "")
 
 	// SyncedAt is tagged map:"-", so it takes no part in either direction and
 	// comes back zero however it was set.

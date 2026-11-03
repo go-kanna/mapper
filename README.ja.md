@@ -91,7 +91,7 @@ func EmployeeToProto(src model.Employee) *employeev1.Employee {
 // EmployeeFromProto maps *employeev1.Employee to model.Employee.
 func EmployeeFromProto(src *employeev1.Employee) (model.Employee, error) {
 	if src == nil {
-		return model.Employee{}, nil
+		src = new(employeev1.Employee)
 	}
 	v, err := uuid.Parse(src.GetId())
 	if err != nil {
@@ -209,7 +209,7 @@ var _ = []any{
 
 複数の型にマッピングされる構造体には、そのうち一部の型にしかないフィールドを指すタグが付いていることがあります。そのため、変換先のどのフィールドも指していないタグは、それだけではエラーになりません。変換先フィールドに変換元がなく、変換元フィールドのタグがそのフィールドの名前に近い場合は、エラーでそのタグを指摘します。
 
-protoc-gen-go が生成するようなゲッターを変換元が宣言している場合は、`src.GetName()` のようにゲッターを通じて読むので、nil のメッセージは空として読まれます。nil ポインタをゼロ値に変えるゲッターは使わず、フィールド自体を読みます。ただし、ゲッターの戻り値がすでに変換先の型である場合は除きます。これにより、未設定のフィールドは、空の値から変換されるのではなく、ゼロのままになります。
+nil の変換元は、空の値と同じように変換します。値がないことも、変換先のルールに検査させるためです。関数に nil のメッセージを渡すと空のメッセージを作って変換し、nil のポインタのフィールドは、指す型のゼロ値として変換します。nil のままになるのは、変換先自体がポインタの場合だけです。protoc-gen-go が生成するようなゲッターを変換元が宣言している場合は、`src.GetName()` のようにゲッターを通じて読みます。nil ポインタをゼロ値に変えるゲッターは使わず、フィールド自体を読みます。ただし、ゲッターの戻り値がすでに変換先の型である場合は除きます。これにより、未設定のフィールドは、変換先がポインタなら nil のままになります。
 
 ### タグを付けられないフィールド
 
@@ -254,7 +254,7 @@ type _ interface {
 |---|---|
 | 型が同一 | そのまま代入する。スライスとマップはコピーする |
 | その組の宣言された関数、またはリストに挙げた変換がある | その関数を呼び出す |
-| 変換元がポインタ | デリファレンスする。nil なら変換先はゼロのまま |
+| 変換元がポインタ | デリファレンスする。nil は指す型のゼロ値として変換する |
 | 変換先がポインタ | 変換した値のアドレス |
 | 変換元が kanna-value の値オブジェクト | アクセサが返す値を変換する |
 | 変換先が kanna-value の値オブジェクト | 変換した値でコンストラクタを呼び出す |
@@ -317,7 +317,7 @@ func TodoToProto(src model.Todo) *todov1.Todo {
 // TodoFromProto maps *todov1.Todo to model.Todo.
 func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 	if src == nil {
-		return model.Todo{}, nil
+		src = new(todov1.Todo)
 	}
 	var v *model.CompletedAt
 	if v2 := src.GetCompletedAt(); v2 != nil {

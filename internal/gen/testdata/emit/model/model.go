@@ -128,3 +128,19 @@ type Cash struct{ Office string }
 
 func (Bank) isPayment() {}
 func (Cash) isPayment() {}
+
+// Nickname is a value type whose rule rejects the empty string, written out as
+// kanna-value writes one.
+type Nickname struct{ s string }
+
+func NewNickname(s string) (Nickname, error) {
+	if s == "" {
+		return Nickname{}, rule.Fail("nickname")
+	}
+	return Nickname{s: s}, nil
+}
+
+func (n Nickname) String() string { return n.s }
+
+// Profile needs a nickname, which the wire may leave out.
+type Profile struct{ Nickname Nickname }

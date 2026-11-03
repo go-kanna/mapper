@@ -46,9 +46,13 @@ type opConv struct{ c conv }
 // opCall calls a function of the generated file.
 type opCall struct{ f *function }
 
-// opDeref converts what a pointer points to, leaving the destination zero when
-// the pointer is nil.
-type opDeref struct{ elem op }
+// opDeref converts what a pointer points to, of type typ. A nil converts as the
+// zero value of typ, so that a rule of the destination sees it too, unless the
+// destination is a pointer, which stays nil.
+type opDeref struct {
+	typ  types.Type
+	elem op
+}
 
 // opAddr converts the value and takes the address of the result.
 type opAddr struct{ elem op }
@@ -153,7 +157,7 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	sp, srcPtr := src.(*types.Pointer)
 	if srcPtr {
 		if e, ok := c.try(sp.Elem(), dst, false); ok {
-			return opDeref{e}, true
+			return opDeref{typ: sp.Elem(), elem: e}, true
 		}
 	}
 	if dp, ok := dst.(*types.Pointer); ok {
