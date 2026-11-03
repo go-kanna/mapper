@@ -401,6 +401,20 @@ func destinationNames(st *types.Struct) []string {
 	return names
 }
 
+// armHolder returns the oneof field of st that has an arm whose field is called
+// name, when no exported field of st itself is.
+func armHolder(st *types.Struct, name string) (string, bool) {
+	if slices.Contains(exportedNames(st), name) {
+		return "", false
+	}
+	for f := range st.Fields() {
+		if f.Exported() && slices.ContainsFunc(oneofArms(f.Type()), func(a oneofArm) bool { return a.field.Name() == name }) {
+			return f.Name(), true
+		}
+	}
+	return "", false
+}
+
 // hasField reports whether st has an exported field called name.
 func hasField(st *types.Struct, name string) bool {
 	for f := range st.Fields() {

@@ -313,6 +313,13 @@ func TestPlans_Diagnostics(t *testing.T) {
 			want: "test.go:12:2: error: F: //kanna:share Dat names no field of test.D\n  did you mean Data?",
 		},
 		{
+			name: "a field to share that is an arm of a oneof",
+			src: "type isD_Kind interface{ isD_Kind() }\ntype D_Photo struct{ Photo []byte }\n" +
+				"func (*D_Photo) isD_Kind() {}\ntype D struct{ Kind isD_Kind }\ntype S struct{ Photo []byte }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\t//kanna:share Photo\n\tF(S) D\n}\n",
+			want: "error: F: //kanna:share Photo names the field of an arm of the oneof Kind, which is copied as the arm is",
+		},
+		{
 			name: "a field to share that holds no slice or map",
 			src: "type S struct{ N int }\ntype D struct{ N int }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\t//kanna:share N\n\tF(S) D\n}\n",
