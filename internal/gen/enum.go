@@ -74,7 +74,7 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		proto, _ = protoEnum(f.src)
 	}
 
-	protoConsts := enumtype.Constants(proto)
+	protoConsts := enumtype.Constants(proto, p.fset)
 	byKey := make(map[string]*types.Const, len(protoConsts))
 	for _, c := range protoConsts {
 		if k := protoKey(proto, c); byKey[k] == nil {
@@ -82,10 +82,11 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		}
 	}
 
-	shared := sharedPrefix(goEnum.Constants)
+	goConsts := enumtype.Constants(goEnum.Named, p.fset)
+	shared := sharedPrefix(goConsts)
 	ep := &enumPlan{}
 	matched := make(map[int64]*types.Const) // the constant of kanna-value for each number
-	for _, c := range goEnum.Constants {
+	for _, c := range goConsts {
 		if !c.Exported() && c.Pkg() != p.conv.pkg {
 			continue
 		}
