@@ -2,6 +2,7 @@ package gen_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -259,6 +260,64 @@ type _ interface {
 		}
 	}
 	compiles(t, dir)
+}
+
+// The variants of a sum type and the arms of a oneof are taken file by file in
+// name order, whichever file go/packages parses first, so that the output stays
+// the same from one run to the next.
+func TestGenerate_VariantsInFileOrder(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"mapper.go": `package app
+
+type Payment interface{ isPayment() }
+
+type S struct{ Payment Payment }
+
+type isD_Payment interface{ isD_Payment() }
+
+type D struct{ Payment isD_Payment }
+
+//kanna:mapper
+type _ interface {
+	F(S) D
+	G(D) (S, error)
+}
+`}
+	want := make([]string, 0, 20)
+	for i := range 10 {
+		v := fmt.Sprintf("V%d", i)
+		files[strings.ToLower(v)+".go"] = fmt.Sprintf("package app\n\ntype %[1]s struct{ N int }\n\n"+
+			"func (%[1]s) isPayment() {}\n\ntype %[1]sPB struct{ N int }\n\ntype D_%[1]s struct{ %[1]s *%[1]sPB }\n\n"+
+			"func (*D_%[1]s) isD_Payment() {}\n", v)
+		want = append(want, "case "+v+":", "case *D_"+v+":")
+	}
+	dir := writeModule(t, files)
+
+	for range 5 {
+		set, err := packages.Load([]string{"."}, packages.Config{Dir: dir, TypesInfo: true})
+		if err != nil || len(set.Diags) > 0 {
+			t.Fatalf("load: %v %v", err, set.Diags)
+		}
+		changes, diags := gen.Generate(set)
+		if len(changes) != 1 || len(diags) > 0 {
+			t.Fatalf("generate = %d changes, diagnostics %q; want one, and none", len(changes), diags)
+		}
+		out := string(changes[0].Data)
+		for _, pair := range [][2]string{{"case V", "case V"}, {"case *D_V", "case *D_V"}} {
+			last := -1
+			for _, w := range want {
+				if !strings.HasPrefix(w, pair[0]) {
+					continue
+				}
+				i := strings.Index(out, w)
+				if i < last {
+					t.Fatalf("%s comes before what an earlier file declares:\n%s", w, out)
+				}
+				last = i
+			}
+		}
+	}
 }
 
 func TestCommand_RemovesWhatNoInterfaceDeclares(t *testing.T) {

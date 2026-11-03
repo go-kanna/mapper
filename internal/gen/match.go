@@ -101,9 +101,9 @@ func matchFields(fset *token.FileSet, at site, src, dst types.Type, entries []en
 
 		// An interface the source carries too is copied as it is, rather than
 		// taken apart as a oneof.
-		if arms := oneofArms(f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) &&
+		if arms := oneofArms(m.fset, f.Type()); len(arms) > 0 && !carriesType(sources, f.Type()) &&
 			!slices.ContainsFunc(sources, func(sf sourceField) bool {
-				return sf.via == nil && (sf.v.Name() == f.Name() || sf.tag == f.Name()) && len(sumVariants(sf.v.Type())) > 0
+				return sf.via == nil && (sf.v.Name() == f.Name() || sf.tag == f.Name()) && len(sumVariants(m.fset, sf.v.Type())) > 0
 			}) {
 			if o, ok := m.dstOneof(f, arms, sources, byField, srcStruct); ok {
 				o.named = hasEntry
@@ -134,7 +134,7 @@ func (m *matching) sourceFields(st *types.Struct) []sourceField {
 			continue
 		}
 		fields = append(fields, sourceField{v: f, tag: tag})
-		for _, arm := range oneofArms(f.Type()) {
+		for _, arm := range oneofArms(m.fset, f.Type()) {
 			arms = append(arms, sourceField{v: arm.field, via: f, arm: arm})
 		}
 	}
@@ -179,7 +179,7 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 	byField := make(map[string]entry, len(entries))
 	for _, e := range entries {
 		ok := true
-		if dsts := destinationNames(dstStruct); !slices.Contains(dsts, e.field) {
+		if dsts := destinationNames(m.fset, dstStruct); !slices.Contains(dsts, e.field) {
 			m.diags = append(m.diags, noSuchField(e, e.field, structLabel(m.dst), dsts))
 			ok = false
 		}
@@ -389,11 +389,11 @@ func (m *matching) pos(v *types.Var) token.Position {
 
 // destinationNames lists what a //kanna:map entry can name in st: its exported
 // fields, and the fields of the arms of its oneofs.
-func destinationNames(st *types.Struct) []string {
+func destinationNames(fset *token.FileSet, st *types.Struct) []string {
 	names := exportedNames(st)
 	for f := range st.Fields() {
 		if f.Exported() {
-			for _, arm := range oneofArms(f.Type()) {
+			for _, arm := range oneofArms(fset, f.Type()) {
 				names = append(names, arm.field.Name())
 			}
 		}
@@ -403,12 +403,13 @@ func destinationNames(st *types.Struct) []string {
 
 // armHolder returns the oneof field of st that has an arm whose field is called
 // name, when no exported field of st itself is.
-func armHolder(st *types.Struct, name string) (string, bool) {
+func armHolder(fset *token.FileSet, st *types.Struct, name string) (string, bool) {
 	if slices.Contains(exportedNames(st), name) {
 		return "", false
 	}
 	for f := range st.Fields() {
-		if f.Exported() && slices.ContainsFunc(oneofArms(f.Type()), func(a oneofArm) bool { return a.field.Name() == name }) {
+		arms := oneofArms(fset, f.Type())
+		if f.Exported() && slices.ContainsFunc(arms, func(a oneofArm) bool { return a.field.Name() == name }) {
 			return f.Name(), true
 		}
 	}

@@ -1,8 +1,8 @@
 package gen
 
 import (
-	"cmp"
 	"fmt"
+	"go/token"
 	"go/types"
 	"slices"
 
@@ -33,17 +33,17 @@ type sumCase struct {
 // sumVariants lists the variants of the sum type t is: an interface with an
 // unexported method, so that only its own package implements it, and the
 // exported named types of that package that implement it by value, in the order
-// they are declared. A oneof of protobuf is implemented by its wrappers through
+// they are declared in fset. A oneof of protobuf is implemented by its wrappers through
 // pointers only, so it is none. Any other type has none either.
-func sumVariants(t types.Type) []*types.Named {
-	variants, _ := implementations(t)
+func sumVariants(fset *token.FileSet, t types.Type) []*types.Named {
+	variants, _ := implementations(fset, t)
 	return variants
 }
 
 // implementations returns the exported named types of the package of t that
 // implement it, when it is an interface with an unexported method: by value,
-// and through a pointer only, each in the order they are declared.
-func implementations(t types.Type) (byValue, byPointer []*types.Named) {
+// and through a pointer only, each in the order they are declared in fset.
+func implementations(fset *token.FileSet, t types.Type) (byValue, byPointer []*types.Named) {
 	named, ok := types.Unalias(t).(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
 		return nil, nil
@@ -67,9 +67,8 @@ func implementations(t types.Type) (byValue, byPointer []*types.Named) {
 			byPointer = append(byPointer, v)
 		}
 	}
-	byDecl := func(a, b *types.Named) int { return cmp.Compare(a.Obj().Pos(), b.Obj().Pos()) }
-	slices.SortFunc(byValue, byDecl)
-	slices.SortFunc(byPointer, byDecl)
+	slices.SortFunc(byValue, declOrder(fset))
+	slices.SortFunc(byPointer, declOrder(fset))
 	return byValue, byPointer
 }
 
@@ -96,9 +95,9 @@ func (p *planner) planSum(f *function, at site, pair fieldPair) (sumPlan, bool) 
 	r := reads[0]
 	srcT, dstT := pair.src.v.Type(), pair.dst.Type()
 
-	variants, arms, out := sumVariants(srcT), oneofArms(dstT), true
+	variants, arms, out := sumVariants(p.fset, srcT), oneofArms(p.fset, dstT), true
 	if len(variants) == 0 || len(arms) == 0 {
-		variants, arms, out = sumVariants(dstT), oneofArms(srcT), false
+		variants, arms, out = sumVariants(p.fset, dstT), oneofArms(p.fset, srcT), false
 	}
 	if len(variants) == 0 || len(arms) == 0 {
 		return sumPlan{}, false
@@ -113,7 +112,7 @@ func (p *planner) planSum(f *function, at site, pair fieldPair) (sumPlan, bool) 
 	if !out {
 		sum = dstT
 	}
-	_, byPointer := implementations(sum)
+	_, byPointer := implementations(p.fset, sum)
 	for _, v := range byPointer {
 		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: *%s implements %s, but %s does not, so it is no variant",
 			at.path, pair.dst.Name(), typeLabel(v), typeLabel(sum), typeLabel(v)).
