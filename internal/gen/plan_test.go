@@ -307,6 +307,13 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"  declare a variant named Cash, or map the field with a function of your own",
 		},
 		{
+			name: "a source tag a typo away from a field of the destination",
+			src: "type S struct {\n\tFullName string `map:\"Namee\"`\n\tName string\n}\ntype D struct{ Name string }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "test.go:8:2: warning: map tag \"Namee\" on test.S.FullName names no field of test.D\n" +
+				"  did you mean \"Name\"?",
+		},
+		{
 			name: "a field to share that the destination lacks",
 			src: "type S struct{ Data []byte }\ntype D struct{ Data []byte }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\t//kanna:share Dat\n\tF(S) D\n}\n",

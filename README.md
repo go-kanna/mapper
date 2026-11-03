@@ -246,7 +246,8 @@ when the pointer is nil, or through an embedded field tagged `map:"-"`.
 
 A struct mapped to several types may carry a tag naming a field only some of them have, so a tag naming none of a
 destination's fields is no error by itself. When a destination field has no source and a source field's tag nearly names
-it, the error points the tag out.
+it, the error points the tag out. When the field has a source all the same, such as one of the same name, the tag is
+warned about: `map:"Nmae"` on `FullName` would otherwise leave `Name` filled from `Name` without a word.
 
 A nil source maps as an empty one would, so that the rules of the destination see that it is missing: a function
 given a nil message maps a new empty one, and a nil pointer field converts as the zero value it points to. Only a
@@ -579,8 +580,9 @@ kanna-mapper [flags] [packages]
 | Flag            | Meaning                                                                                      |
 |-----------------|----------------------------------------------------------------------------------------------|
 | `-tags <list>`  | comma-separated build tags                                                                   |
-| `-check`        | verify the output is up to date instead of writing it, including that no output is left over |
+| `-check`        | verify the output is up to date instead of writing it, including that no output is left over; `KANNA_CHECK=1` does the same |
 | `-v`            | list the files written, removed, or left unchanged                                           |
+| `-deps`         | print what a run reads and writes as JSON, for the `kanna` command, and exit                 |
 | `-version`      | print the version                                                                            |
 
 The packages default to the one in the current directory, so `//go:generate go tool kanna-mapper` needs no argument. A
