@@ -36,15 +36,22 @@ type sumCase struct {
 // they are declared. A oneof of protobuf is implemented by its wrappers through
 // pointers only, so it is none. Any other type has none either.
 func sumVariants(t types.Type) []*types.Named {
+	variants, _ := implementations(t)
+	return variants
+}
+
+// implementations returns the exported named types of the package of t that
+// implement it, when it is an interface with an unexported method: by value,
+// and through a pointer only, each in the order they are declared.
+func implementations(t types.Type) (byValue, byPointer []*types.Named) {
 	named, ok := types.Unalias(t).(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
-		return nil
+		return nil, nil
 	}
 	iface, ok := named.Underlying().(*types.Interface)
 	if !ok || !slices.ContainsFunc(slices.Collect(iface.Methods()), func(m *types.Func) bool { return !m.Exported() }) {
-		return nil
+		return nil, nil
 	}
-	var variants []*types.Named
 	scope := named.Obj().Pkg().Scope()
 	for _, name := range scope.Names() {
 		tn, ok := scope.Lookup(name).(*types.TypeName)
@@ -52,12 +59,18 @@ func sumVariants(t types.Type) []*types.Named {
 			continue
 		}
 		v, ok := tn.Type().(*types.Named)
-		if ok && v.TypeParams().Len() == 0 && !types.IsInterface(v) && types.Implements(v, iface) {
-			variants = append(variants, v)
+		switch {
+		case !ok || v.TypeParams().Len() > 0 || types.IsInterface(v):
+		case types.Implements(v, iface):
+			byValue = append(byValue, v)
+		case types.Implements(types.NewPointer(v), iface):
+			byPointer = append(byPointer, v)
 		}
 	}
-	slices.SortFunc(variants, func(a, b *types.Named) int { return cmp.Compare(a.Obj().Pos(), b.Obj().Pos()) })
-	return variants
+	byDecl := func(a, b *types.Named) int { return cmp.Compare(a.Obj().Pos(), b.Obj().Pos()) }
+	slices.SortFunc(byValue, byDecl)
+	slices.SortFunc(byPointer, byDecl)
+	return byValue, byPointer
 }
 
 // armFor returns the arm of arms that the variant v matches: the one whose field,
@@ -93,6 +106,22 @@ func (p *planner) planSum(f *function, at site, pair fieldPair) (sumPlan, bool) 
 
 	sp := sumPlan{dst: pair.dst, read: r, out: out}
 	matched := make(map[*types.Named]bool)
+
+	// A value of the field could hold such a type or a pointer to it, which no
+	// case can take both of.
+	sum := srcT
+	if !out {
+		sum = dstT
+	}
+	_, byPointer := implementations(sum)
+	for _, v := range byPointer {
+		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: *%s implements %s, but %s does not, so it is no variant",
+			at.path, pair.dst.Name(), typeLabel(v), typeLabel(sum), typeLabel(v)).
+			WithHints(fmt.Sprintf("declare the methods of %s on %s, not on *%s", typeLabel(sum), typeLabel(v), typeLabel(v))))
+		if a, ok := armFor(v, arms); ok {
+			matched[a.wrapper] = true
+		}
+	}
 	for _, v := range variants {
 		a, ok := armFor(v, arms)
 		if !ok {

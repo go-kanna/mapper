@@ -18,7 +18,9 @@ type oneofArm struct {
 // oneofArms lists the arms of the oneof t is: the structs of the interface's
 // package that implement it through a pointer and wrap one exported field, in
 // the order they are declared, which protoc-gen-go makes the order of the
-// oneof's fields. Any other type has none.
+// oneof's fields. An interface that a type implements by value is a sum type of
+// the domain, whose types implementing it through a pointer are no arms but
+// variants it reports. Any other type has none.
 func oneofArms(t types.Type) []oneofArm {
 	named, ok := types.Unalias(t).(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
@@ -37,14 +39,14 @@ func oneofArms(t types.Type) []oneofArm {
 			continue
 		}
 		wrapper, ok := tn.Type().(*types.Named)
-		if !ok || wrapper.TypeParams().Len() > 0 {
+		if !ok || wrapper.TypeParams().Len() > 0 || types.IsInterface(wrapper) {
 			continue
 		}
+		if types.Implements(wrapper, iface) {
+			return nil
+		}
 		st, ok := wrapper.Underlying().(*types.Struct)
-		// A type implementing the interface by value is a variant of a sum type
-		// of the domain rather than a wrapper.
-		if !ok || st.NumFields() != 1 || !st.Field(0).Exported() || !types.Implements(types.NewPointer(wrapper), iface) ||
-			types.Implements(wrapper, iface) {
+		if !ok || st.NumFields() != 1 || !st.Field(0).Exported() || !types.Implements(types.NewPointer(wrapper), iface) {
 			continue
 		}
 		arms = append(arms, oneofArm{wrapper: wrapper, field: st.Field(0)})

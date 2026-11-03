@@ -702,6 +702,58 @@ type _ interface {
 	}
 }
 
+// A type implementing a sum type through a pointer is no variant, as a value of
+// it in the field could be the value or the pointer, so it is reported both ways
+// rather than left out.
+func TestPlans_PointerVariant(t *testing.T) {
+	t.Parallel()
+
+	_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Payment interface{ isPayment() }
+
+type Bank struct{ Account string }
+
+type Card struct{ Number string }
+
+func (Bank) isPayment()  {}
+func (*Card) isPayment() {}
+
+type S struct{ Payment Payment }
+
+type BankPB struct{ Account string }
+
+type CardPB struct{ Number string }
+
+type isD_Payment interface{ isD_Payment() }
+
+type D_Bank struct{ Bank *BankPB }
+
+type D_Card struct{ Card *CardPB }
+
+func (*D_Bank) isD_Payment() {}
+func (*D_Card) isD_Payment() {}
+
+type D struct{ Payment isD_Payment }
+
+//kanna:mapper
+type _ interface {
+	F(S) D
+	G(D) (S, error)
+}
+`}))
+
+	want := []string{
+		"test.go:31:2: error: F: Payment: *test.Card implements test.Payment, but test.Card does not, so it is no variant\n" +
+			"  declare the methods of test.Payment on test.Card, not on *test.Card",
+		"test.go:32:2: error: G: Payment: *test.Card implements test.Payment, but test.Card does not, so it is no variant\n" +
+			"  declare the methods of test.Payment on test.Card, not on *test.Card",
+	}
+	if !slices.EqualFunc(diags, want, strings.HasSuffix) {
+		t.Errorf("diagnostics =\n%s\nwant ones ending in\n%s", strings.Join(diags, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestUnexported(t *testing.T) {
 	t.Parallel()
 
