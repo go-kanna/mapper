@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.9
 
 require (
-	github.com/go-kanna/internal v0.0.24
+	github.com/go-kanna/internal v0.0.25
 	github.com/go-kanna/value v0.0.1
 )
 

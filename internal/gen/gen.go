@@ -33,7 +33,7 @@ func Command() cli.Command[config] {
 		Help: "The packages default to the one in the current directory, so that\n" +
 			"//go:generate go tool " + generator + " needs no argument.",
 		Flags: func(fs *flag.FlagSet, cfg *config) {
-			fs.StringVar(&cfg.tags, "tags", "", "comma-separated build tags")
+			cli.Tags(fs, &cfg.tags)
 		},
 		Run:  run,
 		Deps: reportDeps,
