@@ -186,7 +186,8 @@ function of the package that would fit a missing conversion is pointed out in th
 
 Two entries of a package's lists for the same pair of types stop generation, used or not, so that adding
 `uuid.MustParse` next to `uuid.Parse` cannot change which one runs. So does an entry for a pair one of the package's
-declared functions already maps.
+declared functions already maps, and one converting a type to itself, such as `strings.ToLower`: a value of one type is
+assigned as it is, before any conversion is looked for. For some strings to convert, give them a type of their own.
 
 ### Sharing a list
 
