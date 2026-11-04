@@ -424,8 +424,10 @@ An [enum of kanna-value](https://github.com/go-kanna/value#enums), a string type
 and from an enum of protobuf by the names of their constants: the Go constant's past its type's, `Placed` in
 `OrderStatusPlaced`, and the protobuf value's past its enum's, `PLACED` in `ORDER_STATUS_PLACED`, compared regardless of
 case and underscores. A constant not named after its type is compared by the whole of its name: `APNsSandbox` of the
-type `APNsEnvironment` matches `APNS_SANDBOX`, and `APNsEnvironmentSandbox` matches `SANDBOX`. A function is written for
-each direction:
+type `APNsEnvironment` matches `APNS_SANDBOX`, and `APNsEnvironmentSandbox` matches `SANDBOX`. The names match one to
+one: a constant matching two values, such as `SANDBOX` and `ENV_SANDBOX` of the enum `Env`, stops generation, and so do
+two constants matching one value; an alias, of the same number, is the same value. A function is written for each
+direction:
 
 ```go
 // orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.
