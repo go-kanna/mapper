@@ -330,7 +330,8 @@ Two types declared with `type` never convert into each other on their own, even 
 other. A protobuf enum and a domain enum may both be `int32`, but on the wire 0 is `STATUS_UNSPECIFIED`, while in the
 domain it is likely a real status; converting the number would quietly change what it means. List a function between
 them, or make the domain's an [enum of kanna-value](#enums), which maps by name. A declared type and a predeclared one
-still convert: `model.Email` → `string` is `string(src.Email)`.
+still convert: `model.Email` → `string` is `string(src.Email)`. A predeclared type gives a value no meaning of its own,
+so the number or the string means on one side what it meant on the other.
 
 A nil source stays nil whenever the destination is a pointer too. That includes a conversion that takes the source
 pointer itself, such as `(*timestamppb.Timestamp).AsTime` filling a `*time.Time`: it is called only when the source is
