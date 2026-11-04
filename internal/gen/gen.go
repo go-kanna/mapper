@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kanna/internal/cli"
 	"github.com/go-kanna/internal/diag"
+	"github.com/go-kanna/internal/directive"
 	"github.com/go-kanna/internal/output"
 	"github.com/go-kanna/internal/packages"
 )
@@ -165,6 +166,8 @@ func generate(set packages.Set, targets map[string]bool) ([]output.Change, []str
 
 		ds, dd := decls(pkg)
 		diags = append(diags, dd...)
+		diags = append(diags, directive.Loose(directive.Lines(pkg.Fset, pkg.Syntax),
+			mapperKey, mapKey, shareKey, allowKey, converterKey)...)
 		if len(ds) == 0 {
 			// A package whose interfaces have all lost the directive keeps the
 			// functions an earlier run wrote unless the file goes as well.

@@ -406,9 +406,11 @@ func TestCommand_KeepsOutputOnADirectiveWarning(t *testing.T) {
 	const src = "package app\n\nimport \"net/netip\"\n\n//kanna:mapper\ntype _ interface {\n" +
 		"\tToPB(Employee) *EmployeePB\n}\n\n//kanna:converter\nvar _ = []any{netip.Addr.String}\n"
 
-	tests := []struct{ name, line string }{
-		{name: "spaced", line: "// kanna:map Id=-"},
-		{name: "misspelled", line: "//kanna:mapp Id=-"},
+	tests := []struct{ name, line, want string }{
+		{name: "spaced", line: "// kanna:map Id=-", want: "is not recognized as a directive"},
+		{name: "misspelled", line: "//kanna:mapp Id=-", want: "is not recognized as a directive"},
+		// A blank line keeps it from the method's doc comment.
+		{name: "loose", line: "//kanna:map Id=-\n", want: "//kanna:map is not attached to a declaration"},
 	}
 
 	for _, tt := range tests {
@@ -422,7 +424,7 @@ func TestCommand_KeepsOutputOnADirectiveWarning(t *testing.T) {
 
 			writeFile(t, filepath.Join(dir, "mapper.go"), strings.Replace(src, "\tToPB(", "\t"+tt.line+"\n\tToPB(", 1))
 			code, _, stderr := run(t, dir)
-			if code != cli.ExitOK || !strings.Contains(stderr, "is not recognized as a directive") {
+			if code != cli.ExitOK || !strings.Contains(stderr, tt.want) {
 				t.Errorf("run = %d, stderr %q; want success with a warning", code, stderr)
 			}
 			got := readFile(t, filepath.Join(dir, "mapper_gen.go"))
