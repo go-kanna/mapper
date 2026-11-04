@@ -341,12 +341,20 @@ func (r *listReader) function(q queued, e ast.Expr, fn *types.Func, sig *types.S
 
 // resolve keeps the nearest conversion for each pair of types, leaving out the
 // pairs a function of ds maps, and reports the conversions that are equally
-// near.
+// near, and those of a type to itself, which nothing calls.
 func (r *listReader) resolve(ds []decl) []conv {
 	slices.SortStableFunc(r.entries, func(a, b conv) int { return cmp.Compare(a.depth, b.depth) })
 
 	var kept []conv
 	for _, c := range r.entries {
+		if types.Identical(c.src, c.dst) {
+			// A value of one type is assigned as it is, before any conversion
+			// is looked for, wherever the list is used.
+			r.diags = append(r.diags, diag.Errorf(c.pos, "%s converts %s to itself, which is assigned as it is",
+				c.label, typeLabel(c.src)).
+				WithHints(fmt.Sprintf("for some values of %s to convert, give them a type of their own", typeLabel(c.src))))
+			continue
+		}
 		if i := slices.IndexFunc(ds, func(d decl) bool { return samePair(d.src, d.dst, c.src, c.dst) }); i >= 0 {
 			if c.depth == 0 {
 				r.diags = append(r.diags, diag.Errorf(c.pos, "%s converts %s to %s, which %s is declared to do",

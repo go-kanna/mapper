@@ -240,6 +240,12 @@ func TestConvs_Diagnostics(t *testing.T) {
 				"  strconv.Itoa is listed at test.go:6:15",
 		},
 		{
+			name: "a type to itself",
+			src:  "import \"strings\"\n\n//kanna:converter\nvar _ = []any{\n\tstrings.ToLower,\n}\n",
+			want: "test.go:7:2: error: strings.ToLower converts string to itself, which is assigned as it is\n" +
+				"  for some values of string to convert, give them a type of their own",
+		},
+		{
 			name: "a pair a declared function maps",
 			src: "type E struct{ N int }\n\ntype W struct{ N int }\n\n//kanna:mapper\ntype _ interface{ ToW(E) W }\n\n" +
 				"func toW(e E) W { return W(e) }\n\n//kanna:converter\nvar _ = []any{\n\ttoW,\n}\n",
