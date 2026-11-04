@@ -205,6 +205,12 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 			ok = false
 		}
 		switch {
+		case e.approves() && taggedOut(dstStruct, e.field):
+			m.diags = append(m.diags, diag.Errorf(e.pos,
+				"//kanna:%s %s: %s.%s is tagged map:\"-\", which naming it does not undo",
+				mapKey, e.field, structLabel(m.dst), e.field).
+				WithHints(fmt.Sprintf("write %[1]s=<field> to fill it in this function, or drop %[1]s", e.field)))
+			ok = false
 		case e.excluded(), e.approves(),
 			slices.ContainsFunc(sources, func(sf sourceField) bool { return sf.v.Name() == e.source }):
 		case hasField(srcStruct, e.source):
@@ -438,6 +444,17 @@ func armHolder(fset *token.FileSet, st *types.Struct, name string) (string, bool
 }
 
 // hasField reports whether st has an exported field called name.
+// taggedOut reports whether the field name of st is tagged map:"-".
+func taggedOut(st *types.Struct, name string) bool {
+	for i := range st.NumFields() {
+		if st.Field(i).Name() == name {
+			tag, _, _ := strings.Cut(reflect.StructTag(st.Tag(i)).Get(tagKey), ",")
+			return tag == "-"
+		}
+	}
+	return false
+}
+
 func hasField(st *types.Struct, name string) bool {
 	for f := range st.Fields() {
 		if f.Exported() && f.Name() == name {

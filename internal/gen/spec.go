@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -70,7 +71,7 @@ type decl struct {
 
 // entry is one Field=Source of a //kanna:map line, or Field alone, which
 // approves the source the field is matched to anyway, as a strict mapping
-// requires.
+// requires and nothing else does.
 type entry struct {
 	field, source string
 	pos           token.Position // the line
@@ -169,9 +170,18 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 		}
 		dc, ds := declOf(pkg.Fset, fn, f.Doc)
 		diags = append(diags, ds...)
-		if !diag.HasErrors(ds) {
-			dc.strict = strict
-			found = append(found, dc)
+		if diag.HasErrors(ds) {
+			continue
+		}
+		dc.strict = strict
+		found = append(found, dc)
+		for _, e := range dc.entries {
+			if e.approves() && !strict {
+				d := diag.Errorf(e.pos, "//kanna:%s %s: naming a field alone means something only in a strict mapping",
+					mapKey, e.field)
+				diags = append(diags, d.WithHints(fmt.Sprintf("drop %s, or mark the interface //kanna:%s %s",
+					e.field, mapperKey, strictOption)))
+			}
 		}
 	}
 	return found, diags
