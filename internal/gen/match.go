@@ -360,13 +360,17 @@ func embeddedStruct(t types.Type, path []int) (*types.Struct, bool) {
 }
 
 // unmapped reports the destination field name, which label spells, as having
-// no source. A source field whose tag nearly names it is pointed out: a tag
-// may name a field only some destinations have, so one naming none of this
-// destination's is no error by itself.
+// no source. A source field of that name tagged map:"-" is pointed out, and so
+// is one whose tag nearly names it: a tag may name a field only some
+// destinations have, so one naming none of this destination's is no error by
+// itself.
 func (m *matching) unmapped(name, label string, embedded bool, sources []sourceField) {
 	d := diag.Errorf(m.at.pos, "%s: no source in %s for %s", m.at.path, structLabel(m.src), label)
 	if embedded {
 		d = d.WithHints("an embedded field is matched as one field, by its type's name; its fields are not")
+	}
+	if _, st, _ := namedStruct(m.src); hasField(st, name) && taggedOut(st, name) {
+		d = d.WithHints(fmt.Sprintf("%s.%s is tagged map:\"-\"; drop the tag to read it", structLabel(m.src), name))
 	}
 	var tags []string
 	for _, sf := range sources {

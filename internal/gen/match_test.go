@@ -90,6 +90,13 @@ func TestMatches_Diagnostics(t *testing.T) {
 				"  add map:\"B\" to the field of test.S that fills it, or leave it zero with //kanna:map B=-",
 		},
 		{
+			name:  "a source field of the name tagged out",
+			types: "type S struct{ A string; B string `map:\"-\"` }\ntype D struct{ A, B string }",
+			want: "test.go:8:2: error: F: no source in test.S for test.D.B\n" +
+				"  test.S.B is tagged map:\"-\"; drop the tag to read it\n" +
+				"  add map:\"B\" to the field of test.S that fills it, or leave it zero with //kanna:map B=-",
+		},
+		{
 			name:  "an embedded destination field",
 			types: "type S struct{ A, B string }\ntype Inner struct{ B string }\ntype D struct{ A string; Inner }",
 			want: "test.go:9:2: error: F: no source in test.S for test.D.Inner\n" +
