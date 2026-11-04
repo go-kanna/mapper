@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-kanna/internal/cli"
+	"github.com/go-kanna/internal/deps"
 	"github.com/go-kanna/internal/packages"
 
 	"github.com/go-kanna/mapper/internal/gen"
@@ -457,6 +458,70 @@ type _ interface {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "mapper_gen.go")); !os.IsNotExist(err) {
 		t.Errorf("mapper_gen.go is written, or cannot be checked: %v", err)
+	}
+}
+
+// A type marked //kanna:value that kanna-value has not generated yet, as when
+// go generate runs this package before the type's, is pointed out instead of a
+// converter to write.
+func TestCommand_ReportsAValueTypeNotGeneratedYet(t *testing.T) {
+	t.Parallel()
+
+	dir := writeModule(t, ungeneratedValueFiles())
+	code, _, stderr := run(t, dir)
+	want := ungeneratedValueDiags(ungeneratedValueHint + "; run kanna gen, which runs it before kanna-mapper")
+	if code != cli.ExitFailure || stderr != want {
+		t.Errorf("run = %d, stderr\n%s\nwant\n%s", code, stderr, want)
+	}
+}
+
+// Under kanna gen, which runs kanna-value first, there is no other order to
+// suggest.
+func TestCommand_ReportsAValueTypeNotGeneratedYetUnderKanna(t *testing.T) {
+	t.Setenv(deps.PendingEnv, "")
+
+	dir := writeModule(t, ungeneratedValueFiles())
+	code, _, stderr := run(t, dir)
+	if want := ungeneratedValueDiags(ungeneratedValueHint); code != cli.ExitFailure || stderr != want {
+		t.Errorf("run = %d, stderr\n%s\nwant\n%s", code, stderr, want)
+	}
+}
+
+const ungeneratedValueHint = "  model.Email is marked //kanna:value, but kanna-value has not generated its methods yet"
+
+func ungeneratedValueDiags(hint string) string {
+	return "./mapper.go:12:2: error: ToPB: cannot map model.User.Email (model.Email) to app.UserPB.Email (string)\n" +
+		hint + "\n" +
+		"./mapper.go:12:2: error: ToPB: cannot map model.User.Aliases ([]model.Email) to app.UserPB.Aliases ([]string)\n" +
+		hint + "\n"
+}
+
+func ungeneratedValueFiles() map[string]string {
+	return map[string]string{
+		"model/model.go": `package model
+
+//kanna:value
+type Email struct{ s string }
+
+type User struct {
+	Email   Email
+	Aliases []Email
+}
+`,
+		"mapper.go": `package app
+
+import "example.com/app/model"
+
+type UserPB struct {
+	Email   string
+	Aliases []string
+}
+
+//kanna:mapper
+type _ interface {
+	ToPB(model.User) UserPB
+}
+`,
 	}
 }
 

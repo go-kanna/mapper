@@ -90,6 +90,13 @@ func TestMatches_Diagnostics(t *testing.T) {
 				"  add map:\"B\" to the field of test.S that fills it, or leave it zero with //kanna:map B=-",
 		},
 		{
+			name:  "a source field of the name tagged out",
+			types: "type S struct{ A string; B string `map:\"-\"` }\ntype D struct{ A, B string }",
+			want: "test.go:8:2: error: F: no source in test.S for test.D.B\n" +
+				"  test.S.B is tagged map:\"-\"; drop the tag to read it\n" +
+				"  add map:\"B\" to the field of test.S that fills it, or leave it zero with //kanna:map B=-",
+		},
+		{
 			name:  "an embedded destination field",
 			types: "type S struct{ A, B string }\ntype Inner struct{ B string }\ntype D struct{ A string; Inner }",
 			want: "test.go:9:2: error: F: no source in test.S for test.D.Inner\n" +
@@ -154,6 +161,12 @@ func TestMatches_Diagnostics(t *testing.T) {
 			types: "type S struct{ A string }\ntype D struct{ A string; Revision int }",
 			entry: "Revison=-",
 			want:  "test.go:8:2: error: //kanna:map Revison=-: test.D has no field Revison\n  did you mean \"Revision\"?",
+		},
+		{
+			name:  "an entry naming no destination field alone",
+			types: "type S struct{ ID string }\ntype D struct{ Id string }",
+			entry: "ID",
+			want:  "test.go:8:2: error: //kanna:map ID: test.D has no field ID\n  did you mean \"Id\"?",
 		},
 		{
 			name:  "an entry naming no source field",

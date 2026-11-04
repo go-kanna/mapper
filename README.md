@@ -418,7 +418,9 @@ returning it (`Time` for a `time.Time`, `String` for a `string`), and `NewX(T) (
 for the pair is called instead, as for any other type. An unexported value type of another package cannot be made
 here, as its constructor is unexported too, so the field is reported as one that cannot be mapped. A value type whose
 package this one sees only through another is made the same way: the export data it is seen through carries the type
-without its constructor, so kanna-mapper loads the package declaring it too.
+without its constructor, so kanna-mapper loads the package declaring it too. The mark is read only to say, of a field
+that cannot be mapped, that kanna-value has not generated its type yet, as when `go generate ./...` reaches this package
+before the type's; `kanna gen` runs kanna-value first.
 
 ## Enums
 

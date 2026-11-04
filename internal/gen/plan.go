@@ -283,11 +283,17 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 	}
 	d := diag.Errorf(at.pos, "%s: cannot map %s (%s) to %s (%s)", at.path, src, typeLabel(srcT), dst, typeLabel(dstT))
 
-	hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), converterKey)
-	if c, ok := p.conv.convs.unlistedFor(srcT, dstT); ok {
-		hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
+	// A converter written for a value type kanna-value has yet to generate
+	// would only stand in for what it generates.
+	hints := p.ungeneratedHints(srcT, dstT)
+	if len(hints) == 0 {
+		hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), converterKey)
+		if c, ok := p.conv.convs.unlistedFor(srcT, dstT); ok {
+			hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
+		}
+		hints = []string{hint}
 	}
-	d = d.WithHints(hint)
+	d = d.WithHints(hints...)
 	if v, ok := valuetype.Of(derefType(dstT)); ok && !callable(v, p.conv.pkg) {
 		if obj := v.Named.Obj(); !obj.Exported() && obj.Pkg() != p.conv.pkg {
 			newFunc, _ := valuetype.Constructors(obj.Name())
