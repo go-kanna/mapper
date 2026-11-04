@@ -1,6 +1,7 @@
 // Package wire is the other side of the emit test, written as protoc-gen-go
 // writes messages: exported fields, nil-safe getters, unexported bookkeeping,
-// and a oneof.
+// and a oneof. ProtoReflect stands in for the one returning a
+// protoreflect.Message, which tells a message apart.
 package wire
 
 import (
@@ -12,6 +13,8 @@ import (
 type Timestamp struct {
 	Seconds int64
 }
+
+func (x *Timestamp) ProtoReflect() any { return x }
 
 // NewTimestamp is timestamppb.New.
 func NewTimestamp(t time.Time) *Timestamp {
@@ -116,6 +119,8 @@ type Employee struct {
 	Payment isEmployee_Payment
 }
 
+func (x *Employee) ProtoReflect() any { return x }
+
 func (x *Employee) GetPayment() isEmployee_Payment {
 	if x != nil {
 		return x.Payment
@@ -144,10 +149,14 @@ type Bank struct {
 	Account string
 }
 
+func (x *Bank) ProtoReflect() any { return x }
+
 type Cash struct {
 	state  int
 	Office string
 }
+
+func (x *Cash) ProtoReflect() any { return x }
 
 // GetBackup reads a proto3 optional field: nil becomes "".
 func (x *Employee) GetBackup() string {
@@ -191,6 +200,8 @@ type Address struct {
 	City  string
 }
 
+func (x *Address) ProtoReflect() any { return x }
+
 func (x *Address) GetCity() string {
 	if x != nil {
 		return x.City
@@ -202,6 +213,8 @@ type Contact struct {
 	state int
 	Kind  isContact_Kind
 }
+
+func (x *Contact) ProtoReflect() any { return x }
 
 func (x *Contact) GetKind() isContact_Kind {
 	if x != nil {
@@ -232,6 +245,8 @@ type Profile struct {
 	Bio      *string
 	Grade    int32
 }
+
+func (x *Profile) ProtoReflect() any { return x }
 
 // GetNickname reads a proto3 optional field: nil becomes "".
 func (x *Profile) GetNickname() string {

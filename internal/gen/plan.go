@@ -238,19 +238,33 @@ func (p *planner) checkShared(f *function) []string {
 	return shared
 }
 
-// readsOf lists the ways to read field from a src: its getter, when src
-// declares one as protoc-gen-go writes them, then the field itself. A getter
-// promoted from an embedded struct reads that struct's field, so it does not
-// count.
+// readsOf lists the ways to read field from a src: its getter, when src is a
+// message of protobuf, then the field itself. A getter promoted from an
+// embedded struct reads that struct's field, so it does not count.
 func readsOf(src types.Type, field *types.Var) []read {
 	var reads []read
-	obj, index, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
-	if m, ok := obj.(*types.Func); ok && len(index) == 1 {
-		if sig := m.Signature(); sig.Params().Len() == 0 && sig.Results().Len() == 1 {
-			reads = append(reads, read{name: m.Name(), getter: true, typ: sig.Results().At(0).Type()})
+	if protoMessage(src) {
+		obj, index, _ := types.LookupFieldOrMethod(src, true, field.Pkg(), "Get"+field.Name())
+		if m, ok := obj.(*types.Func); ok && len(index) == 1 {
+			if sig := m.Signature(); sig.Params().Len() == 0 && sig.Results().Len() == 1 {
+				reads = append(reads, read{name: m.Name(), getter: true, typ: sig.Results().At(0).Type()})
+			}
 		}
 	}
 	return append(reads, read{name: field.Name(), typ: field.Type()})
+}
+
+// protoMessage reports whether t, or what it points to, is a message as
+// protoc-gen-go writes them, whose pointer has a ProtoReflect method. On any
+// other type, a method named as a getter is the type's own, not a way to read
+// the field.
+func protoMessage(t types.Type) bool {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	obj, _, _ := types.LookupFieldOrMethod(types.NewPointer(t), false, nil, "ProtoReflect")
+	fn, ok := obj.(*types.Func)
+	return ok && fn.Signature().Params().Len() == 0 && fn.Signature().Results().Len() == 1
 }
 
 func nilable(t types.Type) bool {

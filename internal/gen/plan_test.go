@@ -45,6 +45,8 @@ type Wire struct {
 	Code    *string
 }
 
+func (w *Wire) ProtoReflect() any { return w }
+
 func (w *Wire) GetName() string {
 	if w != nil {
 		return w.Name
@@ -131,6 +133,31 @@ func addressToAddressPB() {}
 	}
 }
 
+// A method of the name of a getter on a type that is no message of protobuf is
+// the type's own, so the field is read as it is.
+func TestPlans_GetterOfNoMessage(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type User struct{ Name string }
+
+func (u User) GetName() string { return "user: " + u.Name }
+
+type UserDTO struct{ Name string }
+
+//kanna:mapper
+type _ interface{ ToDTO(User) UserDTO }
+`}))
+
+	if want := []string{"ToDTO(src test.User) test.UserDTO\n  Name = .Name direct"}; !slices.Equal(found, want) {
+		t.Errorf("plans = %q, want %q", found, want)
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
 // A getter promoted from an embedded struct reads that struct's field, so the
 // field of the same name beside it is read as it is.
 func TestPlans_PromotedGetter(t *testing.T) {
@@ -146,6 +173,8 @@ type S struct {
 	Base
 	ID string
 }
+
+func (s *S) ProtoReflect() any { return s }
 
 type D struct{ ID string }
 
