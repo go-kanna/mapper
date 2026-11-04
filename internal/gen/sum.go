@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
+	"strings"
 
 	"github.com/go-kanna/internal/diag"
 )
@@ -72,19 +73,19 @@ func implementations(fset *token.FileSet, t types.Type) (byValue, byPointer []*t
 	return byValue, byPointer
 }
 
-// armFor returns the arm of arms that the variant v matches: the one whose field,
-// or the message it holds, is named as v is, regardless of case and underscores.
-func armFor(v *types.Named, arms []oneofArm) (oneofArm, bool) {
+// armsFor returns the arms of arms that the variant v matches: those whose field
+// is named as v is, regardless of case and underscores. The message an arm
+// holds is not looked at, so that no arm wins by the order they are declared
+// in.
+func armsFor(v *types.Named, arms []oneofArm) []oneofArm {
 	key := normalize(v.Obj().Name())
+	var found []oneofArm
 	for _, a := range arms {
 		if normalize(a.field.Name()) == key {
-			return a, true
-		}
-		if m := namedOf(a.field.Type()); m != nil && normalize(m.Obj().Name()) == key {
-			return a, true
+			found = append(found, a)
 		}
 	}
-	return oneofArm{}, false
+	return found
 }
 
 // planSum plans pair, a field of f, when it maps a sum type to a oneof or a
@@ -117,22 +118,35 @@ func (p *planner) planSum(f *function, at site, pair fieldPair) (sumPlan, bool) 
 		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: *%s implements %s, but %s does not, so it is no variant",
 			at.path, pair.dst.Name(), typeLabel(v), typeLabel(sum), typeLabel(v)).
 			WithHints(fmt.Sprintf("declare the methods of %s on %s, not on *%s", typeLabel(sum), typeLabel(v), typeLabel(v))))
-		if a, ok := armFor(v, arms); ok {
+		for _, a := range armsFor(v, arms) {
 			matched[a.wrapper] = true
 		}
 	}
 	for _, v := range variants {
-		a, ok := armFor(v, arms)
-		if !ok {
+		found := armsFor(v, arms)
+		for _, a := range found {
+			matched[a.wrapper] = true
+		}
+		switch {
+		case len(found) == 0:
 			if out {
 				p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: %s has no arm in %s", at.path, pair.dst.Name(),
 					typeLabel(v), typeLabel(dstT)).
-					WithHints(fmt.Sprintf("add an arm named %s to the oneof, or holding a message of that name",
+					WithHints(fmt.Sprintf("add an arm named %s to the oneof, or map the field with a function of your own",
 						v.Obj().Name())))
 			}
 			continue
+		case len(found) > 1:
+			labels := make([]string, len(found))
+			for i, a := range found {
+				labels[i] = a.field.Name()
+			}
+			p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: %s matches more than one arm of %s: %s",
+				at.path, pair.dst.Name(), typeLabel(v), typeLabel(dstT), strings.Join(labels, ", ")).
+				WithHints("map the field with a function of your own"))
+			continue
 		}
-		matched[a.wrapper] = true
+		a := found[0]
 		from, to := types.Type(v), a.field.Type()
 		if !out {
 			from, to = to, from

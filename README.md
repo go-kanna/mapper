@@ -545,9 +545,9 @@ type Employee struct {
 }
 ```
 
-A field of a sum type maps to a oneof field of the same name, each variant to the arm whose field, or the message it
-holds, is named as the variant is, regardless of case and underscores. The value converts as any other would, here
-through functions written for `Bank` and `Cash`:
+A field of a sum type maps to a oneof field of the same name, each variant to the arm whose field is named as the
+variant is, regardless of case and underscores; the message the arm holds is not looked at, and a variant matching two
+arms stops generation. The value converts as any other would, here through functions written for `Bank` and `Cash`:
 
 ```go
 switch v := src.Payment.(type) {
