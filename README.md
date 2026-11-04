@@ -235,9 +235,8 @@ Each destination field takes the first rule that matches.
 |---------------------------------------------------------|----------------------------------------------------------------|
 | the destination field's own tag, or its `//kanna:map`   | a destination tagged `map:"EmployeeName"` reads `EmployeeName` |
 | a source field tagged with the destination's name       | a source tagged `map:"Name"` fills `Name`                      |
-| the same name                                           | `Name` → `Name`                                                |
+| the same name, as Go selects `src.Name`                 | `Name` → `Name`, or else an embedded struct's `Name`           |
 | the same name, any case                                 | `ID` → `Id`                                                    |
-| a promoted field                                        | an embedded struct's field, by exact name                      |
 
 A destination field with no source is an error, not a silent zero value. A field tagged `map:"-"` takes no part in
 mapping, in either direction. A tag on a promoted field keeps applying: a field excluded or renamed in an embedded

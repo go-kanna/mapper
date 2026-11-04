@@ -287,6 +287,8 @@ func (m *matching) source(name, label string, tagged *types.Var, tag string, sou
 		return *chosen, true
 	}
 
+	// The same name is the field Go selects by it, src.Name, the direct one or
+	// else the one promoted; another case comes after.
 	var folds []sourceField
 	for _, sf := range sources {
 		switch {
@@ -297,6 +299,9 @@ func (m *matching) source(name, label string, tagged *types.Var, tag string, sou
 			folds = append(folds, sf)
 		}
 	}
+	if v, ok := m.promotedField(name); ok {
+		return sourceField{v: v}, true
+	}
 	switch len(folds) {
 	case 0:
 	case 1:
@@ -306,10 +311,6 @@ func (m *matching) source(name, label string, tagged *types.Var, tag string, sou
 			m.at.path, label, structLabel(m.src), folds[0].v.Name(),
 			structLabel(m.src), folds[1].v.Name()).WithHints(m.nameItHint(name)))
 		return sourceField{}, false
-	}
-
-	if v, ok := m.promotedField(name); ok {
-		return sourceField{v: v}, true
 	}
 	m.unmapped(name, label, tagged != nil && tagged.Embedded(), sources)
 	return sourceField{}, false
