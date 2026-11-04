@@ -291,7 +291,32 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"type D struct{ Payment isD_Payment }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "error: F: Payment: test.Card has no arm in test.isD_Payment\n" +
-				"  add an arm named Card to the oneof, or holding a message of that name",
+				"  add an arm named Card to the oneof, or map the field with a function of your own",
+		},
+		{
+			// Transfer_ stands for a message named Transfer: the message an arm
+			// holds is not looked at.
+			name: "a variant named as the message an arm holds",
+			src: "type Payment interface{ isPayment() }\n" +
+				"type Transfer struct{ Account string }\nfunc (Transfer) isPayment() {}\ntype S struct{ Payment Payment }\n" +
+				"type Transfer_ struct{ Account string }\n" +
+				"type isD_Payment interface{ isD_Payment() }\ntype D_Bank struct{ Bank *Transfer_ }\n" +
+				"func (*D_Bank) isD_Payment() {}\ntype D struct{ Payment isD_Payment }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "error: F: Payment: test.Transfer has no arm in test.isD_Payment\n" +
+				"  add an arm named Transfer to the oneof, or map the field with a function of your own",
+		},
+		{
+			name: "a variant matching two arms",
+			src: "type Payment interface{ isPayment() }\n" +
+				"type BankA struct{ Account string }\nfunc (BankA) isPayment() {}\ntype S struct{ Payment Payment }\n" +
+				"type BankPB struct{ Account string }\n" +
+				"type isD_Payment interface{ isD_Payment() }\ntype D_BankA struct{ BankA *BankPB }\n" +
+				"type D_Bank_A struct{ Bank_A *BankPB }\nfunc (*D_BankA) isD_Payment() {}\nfunc (*D_Bank_A) isD_Payment() {}\n" +
+				"type D struct{ Payment isD_Payment }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "error: F: Payment: test.BankA matches more than one arm of test.isD_Payment: BankA, Bank_A\n" +
+				"  map the field with a function of your own",
 		},
 		{
 			name: "an arm of a oneof with no variant in the sum type",
