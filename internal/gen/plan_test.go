@@ -789,7 +789,8 @@ func TestPlans_Strict(t *testing.T) {
 
 	const types = "type User struct {\n\tID, Name, Email, Token, Note string\n\tHome Address\n}\n" +
 		"type Address struct{ City string }\n" +
-		"type Public struct {\n\tID, Name string\n\tMail string `map:\"Email\"`\n\tNote string\n}\n" +
+		"type Public struct {\n\tID, Name string\n\tMail string `map:\"Email\"`\n\tNote string\n" +
+		"\tHidden string `map:\"-\"`\n}\n" +
 		"type Mailed struct {\n\tID string\n\tAddress string\n}\n" +
 		"type Homed struct {\n\tID string\n\tHome PublicAddress\n}\n" +
 		"type PublicAddress struct{ City string }\n"
@@ -804,8 +805,20 @@ func TestPlans_Strict(t *testing.T) {
 		{
 			name:    "a field matched by name alone",
 			methods: "\t//kanna:map ID Note=-\n\tToPublic(User) Public\n",
-			want: "test.go:30:2: error: ToPublic: test.Public.Name is not named; a strict mapping fills only the " +
+			want: "test.go:31:2: error: ToPublic: test.Public.Name is not named; a strict mapping fills only the " +
 				"fields //kanna:map or a tag names\n  add Name to the //kanna:map of ToPublic, or Name=- to leave it zero",
+		},
+		{
+			// Naming a field approves how it is filled; it does not undo its
+			// tag.
+			name:    "a field named that its tag leaves out",
+			methods: "\t//kanna:map ID Name Note=- Hidden\n\tToPublic(User) Public\n",
+			want: "test.go:30:2: error: //kanna:map Hidden: test.Public.Hidden is tagged map:\"-\", " +
+				"which naming it does not undo\n  write Hidden=<field> to fill it in this function, or drop Hidden",
+		},
+		{
+			name:    "a field filled that its tag leaves out",
+			methods: "\t//kanna:map ID Name Note=- Hidden=Token\n\tToPublic(User) Public\n",
 		},
 		{
 			name:    "a field named by the source's tag",
@@ -814,7 +827,7 @@ func TestPlans_Strict(t *testing.T) {
 		{
 			name:    "a pair of structs it would write a function for",
 			methods: "\t//kanna:map ID Home\n\tToHomed(User) Homed\n",
-			want: "test.go:30:2: error: ToHomed: Home: a strict mapping calls no function written for test.Address " +
+			want: "test.go:31:2: error: ToHomed: Home: a strict mapping calls no function written for test.Address " +
 				"to test.PublicAddress, whose fields it would fill unnamed\n" +
 				"  declare AddressToPublicAddress(test.Address) test.PublicAddress in the interface, and name its fields",
 		},

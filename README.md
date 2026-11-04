@@ -276,7 +276,8 @@ destination would. An entry naming no field of the destination is an error, with
 name. An entry takes the place of the tags for its field, in that function only, so a struct filled from several types
 can read each under its own name.
 `Field` alone changes nothing about how the field is filled, but names it, as a [strict](#strict-mappings) mapping
-requires.
+requires. It is an error anywhere else, and on a field tagged `map:"-"`, which `Field=Source` fills in that function
+instead.
 
 ### Strict mappings
 

@@ -270,6 +270,13 @@ func TestDecls_Diagnostics(t *testing.T) {
 			want: `did you mean "//kanna:allow unspecified"?`,
 		},
 		{
+			// Only a strict mapping asks for a field to be named.
+			name: "a field named alone in a mapping not strict",
+			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Name\n\tF(E) W\n}\n",
+			want: "test.go:5:2: error: //kanna:map Name: naming a field alone means something only in a strict mapping\n" +
+				"  drop Name, or mark the interface //kanna:mapper strict",
+		},
+		{
 			name: "a name declared by two interfaces",
 			src:  "//kanna:mapper\ntype _ interface{ F(E) W }\n\n//kanna:mapper\ntype _ interface{ F(W) E }\n",
 			want: "test.go:7:19: error: F is declared again; the first is at test.go:4:19",
