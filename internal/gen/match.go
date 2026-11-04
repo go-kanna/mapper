@@ -214,8 +214,8 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 		case e.excluded(), e.approves(),
 			slices.ContainsFunc(sources, func(sf sourceField) bool { return sf.v.Name() == e.source }):
 		case hasField(srcStruct, e.source):
-			m.diags = append(m.diags, diag.Errorf(e.pos, "//kanna:%s %s=%s: %s.%s is tagged map:\"-\"",
-				mapKey, e.field, e.source, structLabel(m.src), e.source))
+			m.diags = append(m.diags, diag.Errorf(e.pos, "//kanna:%s %s: %s.%s is tagged map:\"-\"",
+				mapKey, e, structLabel(m.src), e.source))
 			ok = false
 		case !m.promoted(e.source):
 			m.diags = append(m.diags, noSuchField(e, e.source, structLabel(m.src), exportedNames(srcStruct)))
@@ -229,7 +229,7 @@ func (m *matching) entries(entries []entry, sources []sourceField, srcStruct, ds
 }
 
 func noSuchField(e entry, name, owner string, names []string) diag.Diag {
-	d := diag.Errorf(e.pos, "//kanna:%s %s=%s: %s has no field %s", mapKey, e.field, e.source, owner, name)
+	d := diag.Errorf(e.pos, "//kanna:%s %s: %s has no field %s", mapKey, e, owner, name)
 	if s, ok := suggest.Closest(name, names); ok {
 		d = d.WithHints(fmt.Sprintf("did you mean %q?", s))
 	}

@@ -77,6 +77,14 @@ type entry struct {
 	pos           token.Position // the line
 }
 
+// String spells the entry as it is written.
+func (e entry) String() string {
+	if e.approves() {
+		return e.field
+	}
+	return e.field + "=" + e.source
+}
+
 // excluded reports whether the entry is Field=-, which leaves the field zero.
 func (e entry) excluded() bool {
 	return e.source == "-"

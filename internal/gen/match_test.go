@@ -156,6 +156,12 @@ func TestMatches_Diagnostics(t *testing.T) {
 			want:  "test.go:8:2: error: //kanna:map Revison=-: test.D has no field Revison\n  did you mean \"Revision\"?",
 		},
 		{
+			name:  "an entry naming no destination field alone",
+			types: "type S struct{ ID string }\ntype D struct{ Id string }",
+			entry: "ID",
+			want:  "test.go:8:2: error: //kanna:map ID: test.D has no field ID\n  did you mean \"Id\"?",
+		},
+		{
 			name:  "an entry naming no source field",
 			types: "type S struct{ FullName string }\ntype D struct{ Name string }",
 			entry: "Name=FulName",
