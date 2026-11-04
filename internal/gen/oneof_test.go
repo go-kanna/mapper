@@ -17,6 +17,8 @@ type ChangePB struct {
 	Kind    isChangePB_Kind
 }
 
+func (x *ChangePB) ProtoReflect() any { return x }
+
 func (x *ChangePB) GetKind() isChangePB_Kind {
 	if x != nil {
 		return x.Kind

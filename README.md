@@ -251,8 +251,9 @@ warned about: `map:"Nmae"` on `FullName` would otherwise leave `Name` filled fro
 
 A nil source maps as an empty one would, so that the rules of the destination see that it is missing: a function
 given a nil message maps a new empty one, and a nil pointer field converts as the zero value it points to. Only a
-destination that is a pointer itself stays nil. Where a source declares a getter, as protoc-gen-go writes them, it is
-read through it, `src.GetName()`. A getter that turns a nil pointer into a zero value is passed over for the field
+destination that is a pointer itself stays nil. A message of protobuf, a type with protoc-gen-go's `ProtoReflect`, is
+read through its getters, `src.GetName()`; on any other type, a method of that name is the type's own, and the field
+is read. A getter that turns a nil pointer into a zero value is passed over for the field
 itself, unless its result is already the destination's type, so that a field left unset stays nil where the
 destination is a pointer.
 

@@ -6,7 +6,10 @@
 // write, which is the side of the mapping you do not control.
 package employeev1
 
-import "google.golang.org/protobuf/types/known/timestamppb"
+import (
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
 
 // Status is a protobuf enum: 0 is reserved for "unspecified", as protobuf
 // style asks.
@@ -33,6 +36,10 @@ type Employee struct {
 	// package mapper leaves it out with //kanna:map instead.
 	Revision int32
 }
+
+// ProtoReflect is what tells a message apart, as protoc-gen-go writes it. The
+// stand-in reflects nothing.
+func (x *Employee) ProtoReflect() protoreflect.Message { return nil }
 
 func (x *Employee) GetId() string {
 	if x != nil {
@@ -96,6 +103,10 @@ type Address struct {
 	Street string
 }
 
+// ProtoReflect is what tells a message apart, as protoc-gen-go writes it. The
+// stand-in reflects nothing.
+func (x *Address) ProtoReflect() protoreflect.Message { return nil }
+
 func (x *Address) GetCity() string {
 	if x != nil {
 		return x.City
@@ -120,6 +131,10 @@ type Contact struct {
 	//	*Contact_Postal
 	Kind isContact_Kind
 }
+
+// ProtoReflect is what tells a message apart, as protoc-gen-go writes it. The
+// stand-in reflects nothing.
+func (x *Contact) ProtoReflect() protoreflect.Message { return nil }
 
 func (x *Contact) GetKind() isContact_Kind {
 	if x != nil {

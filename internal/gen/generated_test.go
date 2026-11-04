@@ -171,6 +171,7 @@ func TestGenerated_RoundTrip(t *testing.T) {
 	in.SyncedAt = time.Now() // tagged map:"-", so it does not come back
 
 	w := mapper.EmployeeToWire(in)
+	//nolint:protogetter // wire declares no getters for Former and Shift
 	if w.GetId() != "192.0.2.1" || w.GetName() != "Alice" || w.Login != "alice" || w.Revision != 0 ||
 		w.Status != wire.Status_STATUS_ON_LEAVE || w.Former == nil || *w.Former != wire.Status_STATUS_ACTIVE ||
 		w.Shift == nil || *w.Shift != "night" {
