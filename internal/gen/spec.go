@@ -130,11 +130,9 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 	if !d.Found {
 		return nil, diags
 	}
-	strict := d.Args == strictOption
-	if d.Args != "" && !strict {
-		diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s takes no argument but %s, got %q", mapperKey, strictOption,
-			d.Args))
-	}
+	args, ds := d.Parse(directive.Spec{Words: []string{strictOption}})
+	diags = append(diags, ds...)
+	strict := len(args) > 0
 	for _, key := range []string{mapKey, shareKey, allowKey} {
 		m, ds := directive.Find(pkg.Fset, doc, key)
 		if diags = append(diags, ds...); m.Found {
@@ -311,16 +309,15 @@ func shareEntries(fset *token.FileSet, doc *ast.CommentGroup) ([]entry, []diag.D
 	if !d.Found {
 		return nil, diags
 	}
-	if d.Args == "" {
-		return nil, append(diags, diag.Errorf(d.Pos, "//kanna:%s needs at least one field", shareKey))
-	}
+	args, ds := d.Parse(directive.Spec{Any: "<field>", AnyWord: true, Needed: true})
+	diags = append(diags, ds...)
 	var share []entry
-	for field := range strings.FieldsSeq(d.Args) {
-		if !token.IsIdentifier(field) {
-			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", shareKey, field))
+	for _, a := range args {
+		if !token.IsIdentifier(a.Name) {
+			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", shareKey, a.Name))
 			continue
 		}
-		share = append(share, entry{field: field, pos: d.Pos})
+		share = append(share, entry{field: a.Name, pos: d.Pos})
 	}
 	return share, diags
 }
@@ -334,8 +331,8 @@ func allowsUnspecified(
 	if !d.Found {
 		return false, diags
 	}
-	if d.Args != unspecifiedOption {
-		return false, append(diags, diag.Errorf(d.Pos, "//kanna:%s takes %s, got %q", allowKey, unspecifiedOption, d.Args))
+	if _, ds := d.Parse(directive.Spec{Words: []string{unspecifiedOption}, Needed: true}); len(ds) > 0 {
+		return false, append(diags, ds...)
 	}
 	if _, fromProto := protoEnum(src); !fromProto || !enumPair(src, dst) {
 		return false, append(diags, diag.Errorf(d.Pos,
@@ -352,25 +349,17 @@ func mapEntries(fset *token.FileSet, doc *ast.CommentGroup) ([]entry, []diag.Dia
 	if !d.Found {
 		return nil, diags
 	}
-	if d.Args == "" {
-		return nil, append(diags, diag.Errorf(d.Pos, "//kanna:%s needs at least one Field, Field=Source, or Field=-",
-			mapKey))
-	}
-
+	args, ds := d.Parse(directive.Spec{Any: "<field>", AnyWord: true, AnyKey: true, Needed: true})
+	diags = append(diags, ds...)
 	var entries []entry
-	seen := make(map[string]bool)
-	for arg := range strings.FieldsSeq(d.Args) {
-		field, source, hasSource := strings.Cut(arg, "=")
+	for _, a := range args {
 		switch {
-		case !token.IsIdentifier(field):
-			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, field))
-		case hasSource && source != "-" && !token.IsIdentifier(source):
-			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, source))
-		case seen[field]:
-			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %s appears twice", mapKey, field))
+		case !token.IsIdentifier(a.Name):
+			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, a.Name))
+		case a.HasValue && a.Value != "-" && !token.IsIdentifier(a.Value):
+			diags = append(diags, diag.Errorf(d.Pos, "//kanna:%s: %q is not a field name", mapKey, a.Value))
 		default:
-			seen[field] = true
-			entries = append(entries, entry{field: field, source: source, pos: d.Pos})
+			entries = append(entries, entry{field: a.Name, source: a.Value, pos: d.Pos})
 		}
 	}
 	return entries, diags

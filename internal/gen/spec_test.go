@@ -107,7 +107,7 @@ func TestDecls_Diagnostics(t *testing.T) {
 		{
 			name: "arguments",
 			src:  "//kanna:mapper lenient\ntype _ interface{ F(E) W }\n",
-			want: `test.go:3:1: error: //kanna:mapper takes no argument but strict, got "lenient"`,
+			want: `test.go:3:1: error: //kanna:mapper takes strict, not "lenient"`,
 		},
 		{
 			name: "misspelled",
@@ -195,7 +195,7 @@ func TestDecls_Diagnostics(t *testing.T) {
 		{
 			name: "//kanna:map with nothing after =",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Revision=\n\tF(E) W\n}\n",
-			want: `test.go:5:2: error: //kanna:map: "" is not a field name`,
+			want: "test.go:5:2: error: //kanna:map takes a value for Revision, as in Revision=…",
 		},
 		{
 			name: "//kanna:map with a bad field",
@@ -210,12 +210,12 @@ func TestDecls_Diagnostics(t *testing.T) {
 		{
 			name: "//kanna:map naming a field twice",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map Name=- Name=Title\n\tF(E) W\n}\n",
-			want: "test.go:5:2: error: //kanna:map: Name appears twice",
+			want: "test.go:5:2: error: //kanna:map takes Name once",
 		},
 		{
 			name: "//kanna:map saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:map\n\tF(E) W\n}\n",
-			want: "test.go:5:2: error: //kanna:map needs at least one Field, Field=Source, or Field=-",
+			want: "test.go:5:2: error: //kanna:map needs <field> or <field>=…",
 		},
 		{
 			name: "an enum on one side alone",
@@ -245,12 +245,12 @@ func TestDecls_Diagnostics(t *testing.T) {
 		{
 			name: "//kanna:allow saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow\n\tF(P) (S, error)\n}\n",
-			want: `test.go:5:2: error: //kanna:allow takes unspecified, got ""`,
+			want: "test.go:5:2: error: //kanna:allow needs unspecified",
 		},
 		{
 			name: "//kanna:allow of something else",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow zero\n\tF(P) (S, error)\n}\n",
-			want: `test.go:5:2: error: //kanna:allow takes unspecified, got "zero"`,
+			want: `test.go:5:2: error: //kanna:allow takes unspecified, not "zero"`,
 		},
 		{
 			name: "//kanna:allow going out to protobuf",

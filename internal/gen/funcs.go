@@ -210,9 +210,8 @@ func hasLists(pkg *packages.Package) bool {
 func listOf(pkg *packages.Package, vs *ast.ValueSpec, d directive.Directive, diags []diag.Diag) list {
 	obj, _ := pkg.TypesInfo.Defs[vs.Names[0]].(*types.Var)
 	l := list{obj: obj, pkg: pkg, diags: diags}
-	if d.Args != "" {
-		l.diags = append(l.diags, diag.Errorf(d.Pos, "//kanna:%s takes no arguments, got %q", converterKey, d.Args))
-	}
+	_, ds := d.Parse(directive.Spec{})
+	l.diags = append(l.diags, ds...)
 
 	var lit *ast.CompositeLit
 	if len(vs.Names) == 1 && len(vs.Values) == 1 {

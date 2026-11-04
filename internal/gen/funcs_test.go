@@ -168,7 +168,7 @@ func TestConvs_Diagnostics(t *testing.T) {
 		{
 			name: "arguments",
 			src:  "//kanna:converter strict\nvar _ = []any{}\n",
-			want: `test.go:3:1: error: //kanna:converter takes no arguments, got "strict"`,
+			want: `test.go:3:1: error: //kanna:converter takes no argument, not "strict"`,
 		},
 		{
 			name: "misspelled",
