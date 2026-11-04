@@ -538,6 +538,51 @@ type _ interface {
 	}
 }
 
+func TestPlans_EnumKeysMatchOneToOne(t *testing.T) {
+	t.Parallel()
+
+	_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Env string
+
+const (
+	EnvSandbox Env = "a"
+	EnvOnLeave Env = "b"
+	EnvOnleave Env = "c"
+	EnvLive    Env = "d"
+)
+
+type EnvPB int32
+
+const (
+	EnvPB_ENV_PB_UNSPECIFIED EnvPB = 0
+	EnvPB_ENV_PB_SANDBOX     EnvPB = 1
+	EnvPB_SANDBOX            EnvPB = 2
+	EnvPB_ENV_PB_ON_LEAVE    EnvPB = 3
+	EnvPB_ENV_PB_LIVE        EnvPB = 4
+	EnvPB_LIVE               EnvPB = 4
+)
+
+func (x EnvPB) Enum() *EnvPB { return &x }
+
+//kanna:mapper
+type _ interface {
+	EnvFromPB(EnvPB) (Env, error)
+}
+`}))
+
+	// LIVE is an alias of ENV_PB_LIVE, the same value.
+	const hints = "\n  rename one of them\n  or list a func(test.EnvPB) (test.Env, error) in a //kanna:converter list"
+	want := []string{
+		"test.go:27:2: error: EnvFromPB: test.EnvSandbox matches both ENV_PB_SANDBOX and SANDBOX of test.EnvPB" + hints,
+		"test.go:27:2: error: EnvFromPB: test.EnvOnLeave and test.EnvOnleave both match ENV_PB_ON_LEAVE of test.EnvPB" +
+			hints,
+	}
+	if !slices.Equal(diags, want) {
+		t.Errorf("diagnostics =\n%s\nwant\n%s", strings.Join(diags, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // enumsSrc is an enum of kanna-value and one of protobuf, and a struct holding
 // each.
 const enumsSrc = `package test

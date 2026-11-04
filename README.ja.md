@@ -339,7 +339,7 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 
 ## Enum
 
-[kanna-value の enum](https://github.com/go-kanna/value#enums)（定数の値だけを取る string 型）は、定数の名前によって protobuf の enum と相互にマッピングされます。比較するのは、Go の定数では型名より後の部分（`OrderStatusPlaced` の `Placed`）、protobuf の値では enum 名より後の部分（`ORDER_STATUS_PLACED` の `PLACED`）で、大文字小文字とアンダースコアの違いは無視します。型名で始まらない定数は、名前全体で比較します。型 `APNsEnvironment` の `APNsSandbox` は `APNS_SANDBOX` と一致し、`SANDBOX` と一致するのは `APNsEnvironmentSandbox` です。方向ごとに関数が 1 つ生成されます:
+[kanna-value の enum](https://github.com/go-kanna/value#enums)（定数の値だけを取る string 型）は、定数の名前によって protobuf の enum と相互にマッピングされます。比較するのは、Go の定数では型名より後の部分（`OrderStatusPlaced` の `Placed`）、protobuf の値では enum 名より後の部分（`ORDER_STATUS_PLACED` の `PLACED`）で、大文字小文字とアンダースコアの違いは無視します。型名で始まらない定数は、名前全体で比較します。型 `APNsEnvironment` の `APNsSandbox` は `APNS_SANDBOX` と一致し、`SANDBOX` と一致するのは `APNsEnvironmentSandbox` です。名前の対応は 1 対 1 で、enum `Env` の `SANDBOX` と `ENV_SANDBOX` のように 2 つの値に一致する定数も、1 つの値に一致する 2 つの定数も、生成を止めます。番号が同じ別名は同じ値です。方向ごとに関数が 1 つ生成されます:
 
 ```go
 // orderStatusToOrderv1 maps model.OrderStatus to orderv1.OrderStatus.

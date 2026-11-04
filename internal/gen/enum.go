@@ -73,22 +73,48 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		proto, _ = protoEnum(f.src)
 	}
 
+	// A key matches one value of each enum: two values of protobuf, or two
+	// constants of kanna-value, of one key are an error, rather than the one
+	// declared first. An alias, of the same number, is the same value.
 	protoConsts := enumtype.Constants(proto, p.fset)
 	byKey := make(map[string]*types.Const, len(protoConsts))
+	other := make(map[string]*types.Const) // a second value of a key, of another number
 	for _, c := range protoConsts {
-		if k := protoKey(proto, c); byKey[k] == nil {
+		k := protoKey(proto, c)
+		switch first := byKey[k]; {
+		case first == nil:
 			byKey[k] = c
+		case number(first) != number(c) && other[k] == nil:
+			other[k] = c
 		}
 	}
 
 	goConsts := enumtype.Constants(goEnum.Named, p.fset)
 	ep := &enumPlan{}
 	matched := make(map[int64]*types.Const) // the constant of kanna-value for each number
+	taken := make(map[string]*types.Const)  // the constant of kanna-value for each key
+	ambiguous := func(msg string) {
+		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s", at.path, msg).
+			WithHints("rename one of them", fmt.Sprintf("or list a func(%s) %s in a //kanna:%s list",
+				typeLabel(f.src), resultLabel(f), converterKey)))
+	}
 	for _, c := range goConsts {
 		if !c.Exported() && c.Pkg() != p.conv.pkg {
 			continue
 		}
-		pc, ok := byKey[goKey(goEnum.Named, c)]
+		k := goKey(goEnum.Named, c)
+		pc, ok := byKey[k]
+		switch {
+		case ok && other[k] != nil:
+			ambiguous(fmt.Sprintf("%s matches both %s and %s of %s", qualifiedName(c, labelQualifier),
+				protoValue(proto, pc), protoValue(proto, other[k]), typeLabel(proto)))
+			continue
+		case ok && taken[k] != nil:
+			ambiguous(fmt.Sprintf("%s and %s both match %s of %s", qualifiedName(taken[k], labelQualifier),
+				qualifiedName(c, labelQualifier), protoValue(proto, pc), typeLabel(proto)))
+			continue
+		}
+		taken[k] = c
 		if !ok {
 			d := diag.Errorf(at.pos, "%s: %s has no counterpart in %s",
 				at.path, qualifiedName(c, labelQualifier), typeLabel(proto)).
