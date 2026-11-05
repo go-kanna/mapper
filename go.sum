@@ -1,9 +1,9 @@
 github.com/go-kanna/internal v0.0.25 h1:YhtXo1ixyAt3cvveGzT+GDcc+1DvH7qb6nwXsqxRqp0=
 github.com/go-kanna/internal v0.0.25/go.mod h1:Df477EkeFmw5w4hFNoBGUZfZJfgKJnaemuReERxK7to=
-github.com/go-kanna/value v0.0.1 h1:i0wwG59hxi9cgyNhscpO3U4QBMNY5JxtXDAcTYBzbLc=
-github.com/go-kanna/value v0.0.1/go.mod h1:DwXGvDjxLpxR7y63G5iIb8vIapxx1o38UM3QjjQgmC8=
-github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
-github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/go-kanna/value v0.0.9 h1:h5zDO5TnI9FbfjuvM2XQTJcSLZyfUYF3nhi5vKip1SY=
+github.com/go-kanna/value v0.0.9/go.mod h1:XgM7Ncc9PQsZDeM6RMT8jKvcneO/QGyk7dSkQ7xAOgU=
+github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
 golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
 golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
