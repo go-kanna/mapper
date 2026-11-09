@@ -249,13 +249,12 @@ destination's fields is no error by itself. When a destination field has no sour
 it, the error points the tag out. When the field has a source all the same, such as one of the same name, the tag is
 warned about: `map:"Nmae"` on `FullName` would otherwise leave `Name` filled from `Name` without a word.
 
-A nil source maps as an empty one would, so that the rules of the destination see that it is missing: a function
-given a nil message maps a new empty one, and a nil pointer field converts as the zero value it points to. Only a
-destination that is a pointer itself stays nil. A message of protobuf, a type with protoc-gen-go's `ProtoReflect`, is
-read through its getters, `src.GetName()`; on any other type, a method of that name is the type's own, and the field
-is read. A getter that turns a nil pointer into a zero value is passed over for the field
-itself, unless its result is already the destination's type, so that a field left unset stays nil where the
-destination is a pointer.
+A nil source maps as an empty one would, so that the rules of the destination see that it is missing: a function given a
+nil message maps a new empty one, and a nil pointer field converts as the zero value it points to. Only a destination
+that is a pointer itself stays nil. A message of protobuf, a type with protoc-gen-go's `ProtoReflect`, is read through
+its getters, `src.GetName()`; on any other type, a method of that name is the type's own, and the field is read. A
+getter that turns a nil pointer into a zero value is passed over for the field itself, unless its result is already the
+destination's type, so that a field left unset stays nil where the destination is a pointer.
 
 ### Fields you cannot tag
 
@@ -609,7 +608,8 @@ handled: converted with `uuid.Parse` and `(*timestamppb.Timestamp).AsTime` liste
 between packages, renamed with a tag, excluded with `map:"-"` and with `//kanna:map`, mapped through a function written
 for a nested pair, and folded into a oneof. CI regenerates it and fails if the output would change.
 
-To try it, use Go 1.27 or later: the example uses the standard library's `uuid` package, while kanna-mapper itself requires Go 1.26. No database or protobuf compiler is needed; the wire types are included in the example.
+To try it, use Go 1.27 or later: the example uses the standard library's `uuid` package, while kanna-mapper itself
+requires Go 1.26. No database or protobuf compiler is needed; the wire types are included in the example.
 
 ```sh
 git clone https://github.com/go-kanna/mapper.git
@@ -618,9 +618,14 @@ go generate ./...
 go run .
 ```
 
-Read the [domain types](example/model/model.go), [wire types](example/gen/employeev1/employee.go), and [mapping declarations](example/mapper/mapper.go) alongside the [generated functions](example/mapper/mapper_gen.go). The declarations name the functions and list the conversions; the generated code fills the fields, converts UUIDs and timestamps, and handles nested values and oneofs.
+Read the [domain types](example/model/model.go), [wire types](example/gen/employeev1/employee.go), and [mapping
+declarations](example/mapper/mapper.go) alongside the [generated functions](example/mapper/mapper_gen.go). The
+declarations name the functions and list the conversions; the generated code fills the fields, converts UUIDs and
+timestamps, and handles nested values and oneofs.
 
-In the output, `same id=true` shows that the UUID survived the round trip through a string, and `postal nil=true` shows that the unset oneof arm stayed absent. The final `bad id:` line shows the error returned for an invalid UUID, including the destination field `model.Employee.ID`.
+In the output, `same id=true` shows that the UUID survived the round trip through a string, and `postal nil=true` shows
+that the unset oneof arm stayed absent. The final `bad id:` line shows the error returned for an invalid UUID, including
+the destination field `model.Employee.ID`.
 
 ## Development
 
