@@ -326,12 +326,12 @@ Each field takes the first case that applies.
 "Lossless" is meant strictly: `int32` → `int64` converts, `int64` → `int32` does not. Neither does `int` → `int32`
 (`int` is 64 bits on some platforms), `int` → `uint` (sign), `int64` → `float64` (precision), or a number → `string`.
 
-Two types declared with `type` never convert into each other on their own, even when one could be written as the
-other. A protobuf enum and a domain enum may both be `int32`, but on the wire 0 is `STATUS_UNSPECIFIED`, while in the
-domain it is likely a real status; converting the number would quietly change what it means. List a function between
-them, or make the domain's an [enum of kanna-value](#enums), which maps by name. A declared type and a predeclared one
-still convert: `model.Email` → `string` is `string(src.Email)`. A predeclared type gives a value no meaning of its own,
-so the number or the string means on one side what it meant on the other.
+Two types declared with `type` never convert into each other on their own, even when one could be written as the other.
+A protobuf enum and a domain enum may both be `int32`, but on the wire 0 is `STATUS_UNSPECIFIED`, while in the domain it
+is likely a real status; converting the number would change what it means without a word. List a function between them,
+or make the domain's an [enum of kanna-value](#enums), which maps by name. A declared type and a predeclared one still
+convert: `model.Email` → `string` is `string(src.Email)`. A predeclared type gives a value no meaning of its own, so the
+number or the string means on one side what it meant on the other.
 
 A nil source stays nil whenever the destination is a pointer too. That includes a conversion that takes the source
 pointer itself, such as `(*timestamppb.Timestamp).AsTime` filling a `*time.Time`: it is called only when the source is
@@ -408,9 +408,9 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 ```
 
 A rule can reject the value, so a function making one has to return an error, and the rule's error is wrapped as any
-other is. A zero on the source side is checked like any other value rather than taken for the zero value type, which
-stands for one never given: map an optional field to a pointer, which stays nil. A value whose type stays the same is
-copied, not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
+other is. A zero on the source side is checked like any other value rather than taken for the value type's zero value,
+which stands for one never given: map an optional field to a pointer, which stays nil. A value whose type stays the same
+is copied, not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
 
 A value type is known by the shape kanna-value gives it, not by reading its `//kanna:value`, as kanna-mapper may see
 only the types of the package declaring it: a struct with one unexported field, a method named after the field's type
