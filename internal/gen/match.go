@@ -21,8 +21,8 @@ const tagKey = "map"
 type site struct {
 	pos token.Position
 
-	// path names the function from the declaration: "EmployeeToProto", or
-	// "EmployeeToProto: Address" for one written for a field of it.
+	// path names the function from the declaration: "EmployeeToEmployeev1", or
+	// "EmployeeToEmployeev1: Address" for one written for a field of it.
 	path string
 
 	// suggest is empty for a declared function, whose //kanna:map line the
