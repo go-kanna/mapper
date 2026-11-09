@@ -491,7 +491,7 @@ go generate ./...
 go run .
 ```
 
-[ドメイン型](example/model/model.go)、[ワイヤ型](example/gen/employeev1/employee.go)、[マッピングの宣言](example/mapper/mapper.go) を、[生成された関数](example/mapper/mapper_gen.go) と見比べてください。宣言では関数名と変換のリストを記述し、生成コードがフィールドへの代入、UUID や時刻の変換、ネストした値や oneof の処理を担います。
+[ドメイン型](example/model/model.go)、[ワイヤ型](example/gen/employeev1/employee.go)、[マッピングの宣言](example/mapper/mapper.go) を、[生成された関数](example/mapper/mapper_gen.go) と見比べてください。宣言では関数名と変換のリストを記述し、生成コードがフィールドへの代入、UUID や時刻の変換、ネストした値や oneof の変換を行います。
 
 出力の `same id=true` は、UUID が文字列を経由して元の値に戻ったことを示します。`postal nil=true` は、設定していない oneof のアームが未設定のまま戻ったことを示します。最後の `bad id:` 行では、不正な UUID に対して返されるエラーと、変換先のフィールド `model.Employee.ID` を確認できます。
 

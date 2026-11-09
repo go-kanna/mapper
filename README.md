@@ -621,7 +621,7 @@ go run .
 Read the [domain types](example/model/model.go), [wire types](example/gen/employeev1/employee.go), and [mapping
 declarations](example/mapper/mapper.go) alongside the [generated functions](example/mapper/mapper_gen.go). The
 declarations name the functions and list the conversions; the generated code fills the fields, converts UUIDs and
-timestamps, and handles nested values and oneofs.
+timestamps, and converts nested values and oneofs.
 
 In the output, `same id=true` shows that the UUID survived the round trip through a string, and `postal nil=true` shows
 that the unset oneof arm stayed absent. The final `bad id:` line shows the error returned for an invalid UUID, including
