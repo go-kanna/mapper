@@ -34,13 +34,13 @@ func main() {
 	// The UUID becomes a string and the time a Timestamp through the shared
 	// list in package convert; the status through the functions the mapper
 	// package lists, so StatusActive does not turn into STATUS_UNSPECIFIED.
-	wire := mapper.EmployeeToProto(emp)
+	wire := mapper.EmployeeToEmployeev1(emp)
 	fmt.Fprintf(os.Stdout, "to wire:   id=%s hired=%s status=%d city=%s\n",
 		wire.GetId(), wire.GetHiredAt().AsTime().Format(time.DateOnly), wire.GetStatus(), wire.GetAddress().GetCity())
 
 	// Coming back can fail, because parsing a UUID can, so the function is
 	// declared to return an error, which names the field it came from.
-	back, err := mapper.EmployeeFromProto(wire)
+	back, err := mapper.EmployeeToModel(wire)
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +54,7 @@ func main() {
 
 	// A nil message maps as an empty one does, rather than panicking, so it
 	// is reported for the id it lacks.
-	if _, err := mapper.EmployeeFromProto(nil); err != nil {
+	if _, err := mapper.EmployeeToModel(nil); err != nil {
 		fmt.Fprintln(os.Stdout, "from nil: ", err)
 	}
 
@@ -63,7 +63,7 @@ func main() {
 	fmt.Fprintf(os.Stdout, "excluded:  SyncedAt dropped: %t\n", back.SyncedAt.IsZero())
 
 	// A malformed id is reported with the field that produced it.
-	if _, err := mapper.EmployeeFromProto(&employeev1.Employee{Id: "not-a-uuid"}); err != nil {
+	if _, err := mapper.EmployeeToModel(&employeev1.Employee{Id: "not-a-uuid"}); err != nil {
 		fmt.Fprintln(os.Stdout, "bad id:   ", err)
 	}
 }

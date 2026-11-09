@@ -12,10 +12,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// EmployeeToProto converts an employee for the API.
+// EmployeeToEmployeev1 converts an employee for the API.
 //
 // The server owns Revision, which the domain has no say in.
-func EmployeeToProto(emp model.Employee) *employeev1.Employee {
+func EmployeeToEmployeev1(emp model.Employee) *employeev1.Employee {
 	return &employeev1.Employee{
 		Id:        emp.ID.String(),
 		Name:      emp.FullName,
@@ -27,9 +27,9 @@ func EmployeeToProto(emp model.Employee) *employeev1.Employee {
 	}
 }
 
-// EmployeeFromProto converts an employee from the API. It fails when the
+// EmployeeToModel converts an employee from the API. It fails when the
 // id is not a UUID.
-func EmployeeFromProto(emp *employeev1.Employee) (model.Employee, error) {
+func EmployeeToModel(emp *employeev1.Employee) (model.Employee, error) {
 	if emp == nil {
 		emp = new(employeev1.Employee)
 	}

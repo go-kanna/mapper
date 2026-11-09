@@ -12,16 +12,16 @@ import (
 
 //kanna:mapper
 type _ interface {
-	// EmployeeToProto converts an employee for the API.
+	// EmployeeToEmployeev1 converts an employee for the API.
 	//
 	// The server owns Revision, which the domain has no say in.
 	//
 	//kanna:map Revision=-
-	EmployeeToProto(emp model.Employee) *employeev1.Employee
+	EmployeeToEmployeev1(emp model.Employee) *employeev1.Employee
 
-	// EmployeeFromProto converts an employee from the API. It fails when the
+	// EmployeeToModel converts an employee from the API. It fails when the
 	// id is not a UUID.
-	EmployeeFromProto(emp *employeev1.Employee) (model.Employee, error)
+	EmployeeToModel(emp *employeev1.Employee) (model.Employee, error)
 }
 
 //kanna:converter
