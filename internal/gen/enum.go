@@ -62,9 +62,10 @@ func protoEnum(t types.Type) (*types.Named, bool) {
 // planEnum works out how f, for an enumPair, maps the constants of its source to
 // those of its destination, and says which constant of the enum of kanna-value
 // has no counterpart. Going out, a value no case takes becomes the zero value of
-// protobuf, or an error if f is declared to return one. Coming back, it is an
-// error, so f has to return one, and so is protobuf's 0, unless a constant
-// matches it or f allows it.
+// protobuf, or an error if f is declared to return one, and has to be one when a
+// constant maps to the zero value. Coming back, it is an error, so f has to
+// return one, and so is protobuf's 0, unless a constant matches it or f allows
+// it.
 func (p *planner) planEnum(f *function, at site, param string) *plan {
 	goEnum, out := enumtype.Of(f.src)
 	proto, _ := protoEnum(f.dst)
@@ -138,7 +139,9 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 			ep.zero = pc
 		}
 	}
-	if !out {
+	if out {
+		p.requireErrorForTakenZero(f, ep, at, proto)
+	} else {
 		if d := f.decl; d != nil && !d.fallible {
 			p.diags = append(p.diags, diag.Errorf(at.pos, "%s has to return an error: %s can hold what %s has no value for",
 				d.name, typeLabel(d.src), typeLabel(d.dst)).
@@ -162,6 +165,25 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		}
 	}
 	return &plan{fn: f, param: param, enum: ep}
+}
+
+// requireErrorForTakenZero makes f, going out, return an error when a constant
+// maps to protobuf's 0: a value matching none has no value of its own to
+// become.
+func (p *planner) requireErrorForTakenZero(f *function, ep *enumPlan, at site, proto *types.Named) {
+	for _, c := range ep.cases {
+		if number(c.dst) != 0 {
+			continue
+		}
+		if d := f.decl; d != nil && !d.fallible {
+			p.diags = append(p.diags, diag.Errorf(at.pos,
+				"%s has to return an error: %s maps to %s, the 0 of %s, which a %s matching no constant would become too",
+				d.name, qualifiedName(c.src, labelQualifier), protoValue(proto, c.dst), typeLabel(d.dst), typeLabel(d.src)).
+				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
+		}
+		f.fallible = true
+		return
+	}
 }
 
 // resultLabel spells what f returns, with its error if it has one.

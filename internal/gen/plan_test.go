@@ -761,6 +761,91 @@ type _ interface {
 	}
 }
 
+// colorsSrc is an enum of protobuf whose 0 is a value of its own, which a
+// constant of kanna-value maps to.
+const colorsSrc = `package test
+
+type Color string
+
+const (
+	ColorRed  Color = "red"
+	ColorBlue Color = "blue"
+)
+
+type ColorPB int32
+
+const (
+	ColorPB_COLOR_PB_RED  ColorPB = 0
+	ColorPB_COLOR_PB_BLUE ColorPB = 1
+)
+
+func (x ColorPB) Enum() *ColorPB { return &x }
+
+type Paint struct{ Color Color }
+
+type PaintPB struct{ Color ColorPB }
+`
+
+// Going out, a value matching no constant cannot become protobuf's 0 when a
+// constant maps to it, so it is an error.
+func TestPlans_EnumGoingOutToATakenZero(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": colorsSrc + `
+//kanna:mapper
+type _ interface {
+	PaintToPB(Paint) (PaintPB, error)
+}
+`}))
+
+	want := []string{
+		"PaintToPB(src test.Paint) test.PaintPB (fallible)\n  Color = .Color call:colorToColorPB",
+		"colorToColorPB(src test.Color) test.ColorPB (fallible)\n" +
+			"  ColorRed -> ColorPB_COLOR_PB_RED\n" +
+			"  ColorBlue -> ColorPB_COLOR_PB_BLUE",
+	}
+	if !slices.Equal(found, want) {
+		t.Errorf("plans =\n%s\nwant\n%s", strings.Join(found, "\n"), strings.Join(want, "\n"))
+	}
+	if len(diags) > 0 {
+		t.Errorf("diagnostics = %q, want none", diags)
+	}
+}
+
+func TestPlans_EnumGoingOutToATakenZeroReturnsAnError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, decl, want string
+	}{
+		{
+			name: "the enum's function",
+			decl: "ColorToPB(Color) ColorPB",
+			want: "test.go:25:2: error: ColorToPB has to return an error: test.ColorRed maps to COLOR_PB_RED, " +
+				"the 0 of test.ColorPB, which a test.Color matching no constant would become too\n" +
+				"  declare it as ColorToPB(test.Color) (test.ColorPB, error)",
+		},
+		{
+			name: "a struct's function",
+			decl: "PaintToPB(Paint) PaintPB",
+			want: "test.go:25:2: error: PaintToPB has to return an error: Color is mapped by colorToColorPB, which can fail\n" +
+				"  declare it as PaintToPB(test.Paint) (test.PaintPB, error)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": colorsSrc +
+				"\n//kanna:mapper\ntype _ interface {\n\t" + tt.decl + "\n}\n"}))
+
+			if !slices.Equal(diags, []string{tt.want}) {
+				t.Errorf("diagnostics = %q, want %q", diags, tt.want)
+			}
+		})
+	}
+}
+
 func TestPlans_ValueTypes(t *testing.T) {
 	t.Parallel()
 

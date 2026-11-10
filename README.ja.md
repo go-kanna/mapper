@@ -364,7 +364,7 @@ func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 }
 ```
 
-protobuf にあってドメインにない値や、誰も宣言していない数値は、ドメインに戻ってくる方向でエラーになります。そのため、protobuf から enum をマッピングする関数はエラーを返さなければなりません。protobuf の 0 もこれに含まれます。ただし、0 の値に名前で一致する定数がある場合は除きます。protobuf へ向かう方向では、どの定数でもない値は、空文字列も含めて protobuf の 0 になります。一方、ドメインにあって protobuf にない定数は、生成を止めます:
+protobuf にあってドメインにない値や、誰も宣言していない数値は、ドメインに戻ってくる方向でエラーになります。そのため、protobuf から enum をマッピングする関数はエラーを返さなければなりません。protobuf の 0 もこれに含まれます。ただし、0 の値に名前で一致する定数がある場合は除きます。protobuf へ向かう方向では、どの定数でもない値は、空文字列も含めて protobuf の 0 になります。ただし、`COLOR_RED = 0` のように 0 が実在の値で、それに一致する定数があるときは、その定数と見分けられないのでエラーになり、protobuf へ向かう関数もエラーを返さなければなりません。一方、ドメインにあって protobuf にない定数は、生成を止めます:
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
