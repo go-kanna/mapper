@@ -525,6 +525,52 @@ type _ interface {
 	}
 }
 
+// An enum marked //kanna:enum whose constructor kanna-value has not generated
+// yet is not cast to from a string, which would let any string through, but
+// pointed out as a value type is.
+func TestCommand_ReportsAnEnumNotGeneratedYet(t *testing.T) {
+	t.Parallel()
+
+	dir := writeModule(t, map[string]string{
+		"model/model.go": `package model
+
+//kanna:enum
+type Status string
+
+const StatusOpen Status = "open"
+
+type Item struct {
+	Status   Status
+	Statuses []Status
+}
+`,
+		"mapper.go": `package app
+
+import "example.com/app/model"
+
+type ItemPB struct {
+	Status   string
+	Statuses []string
+}
+
+//kanna:mapper
+type _ interface {
+	FromPB(ItemPB) model.Item
+}
+`,
+	})
+	code, _, stderr := run(t, dir)
+	hint := "  model.Status is marked //kanna:enum, but kanna-value has not generated its constructor yet; " +
+		"run kanna gen, which runs it before kanna-mapper\n"
+	want := "./mapper.go:12:2: error: FromPB: cannot map app.ItemPB.Status (string) to model.Item.Status " +
+		"(model.Status)\n" + hint +
+		"./mapper.go:12:2: error: FromPB: cannot map app.ItemPB.Statuses ([]string) to model.Item.Statuses " +
+		"([]model.Status)\n" + hint
+	if code != cli.ExitFailure || stderr != want {
+		t.Errorf("run = %d, stderr\n%s\nwant\n%s", code, stderr, want)
+	}
+}
+
 // An earlier run's output that no longer compiles is set aside so the package
 // can be read and the output written again.
 func TestCommand_RegeneratesStaleOutput(t *testing.T) {

@@ -492,9 +492,13 @@ to a pointer. The other way, the enum is a string already, and converts as it is
 
 An enum of protobuf is known by the shape protoc-gen-go gives it, an `int32` with an `Enum` method, and an enum of
 kanna-value by a string type with constants beside it, as kanna-mapper may see only the types of the package declaring
-it. An enum whose package this one sees only through another is known as a value type is, once its package is loaded
-too: the export data it is seen through need not carry its constants and its constructor. A function listed for the
-pair is called instead, as for any other type.
+it. That is enough to map it to and from an enum of protobuf, but a string becomes one only through `NewX(string) (X,
+error)` beside it. A string type with constants and no such constructor converts from a string as any declared string
+type does, unless it is marked `//kanna:enum`: then kanna-value has not generated it yet, as when `go generate ./...`
+reaches this package before the type's, and the field is reported as one that cannot be mapped, rather than let any
+string through; `kanna gen` runs kanna-value first. An enum whose package this one sees only through another is known
+as a value type is, once its package is loaded too: the export data it is seen through need not carry its constants and
+its constructor. A function listed for the pair is called instead, as for any other type.
 
 ## Protobuf oneofs
 
@@ -575,7 +579,8 @@ A variant implements the sum type by value, so a pointer to it does too: it goes
 as none. Coming back, a type switch on the oneof sets the variant of the arm that is there, by value. A nil sum type and
 a oneof with no arm set are each other. A variant with no arm stops generation going out, as an arm with no variant does
 coming back. So does a type that implements the sum type through a pointer only: a value of the field could hold it or a
-pointer to it, which no one case takes, so declare its methods on the type itself.
+pointer to it, which no one case takes, so declare its methods on the type itself. So does a type that implements it but
+is unexported or generic: only exported types that are not generic are variants.
 
 Types generated with protobuf's Opaque API, which have no exported fields, are not supported.
 

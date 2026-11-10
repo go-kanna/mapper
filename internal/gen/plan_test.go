@@ -889,6 +889,86 @@ type _ interface {
 	}
 }
 
+// A type that implements a sum type but no type switch of another package can
+// name, unexported or generic, is reported rather than left out.
+func TestPlans_UnnameableVariant(t *testing.T) {
+	t.Parallel()
+
+	_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Payment interface{ isPayment() }
+
+type Bank struct{ Account string }
+
+type voucher struct{ Code string }
+
+type Tagged[T any] struct{ Tag T }
+
+func (Bank) isPayment()       {}
+func (voucher) isPayment()    {}
+func (*Tagged[T]) isPayment() {}
+
+type S struct{ Payment Payment }
+
+type BankPB struct{ Account string }
+
+type isD_Payment interface{ isD_Payment() }
+
+type D_Bank struct{ Bank *BankPB }
+
+func (*D_Bank) isD_Payment() {}
+
+type D struct{ Payment isD_Payment }
+
+//kanna:mapper
+type _ interface {
+	F(S) D
+}
+`}))
+
+	want := []string{
+		"test.go:29:2: error: F: Payment: test.voucher implements test.Payment, but is unexported, so it is no variant\n" +
+			"  export test.voucher, or map the field with a function of your own",
+		"test.go:29:2: error: F: Payment: test.Tagged[T any] implements test.Payment, but is generic, so it is no variant\n" +
+			"  map the field with a function of your own",
+	}
+	if !slices.EqualFunc(diags, want, strings.HasSuffix) {
+		t.Errorf("diagnostics =\n%s\nwant ones ending in\n%s", strings.Join(diags, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A string type with constants but no constructor, and no //kanna:enum, is no
+// enum of kanna-value's, and is cast to from a string as any declared string
+// type is.
+func TestPlans_ConstantsWithoutAConstructor(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Color string
+
+const ColorRed Color = "red"
+
+type S struct{ Color string }
+
+type D struct{ Color Color }
+
+//kanna:mapper
+type _ interface {
+	F(S) D
+}
+`}))
+
+	if len(diags) > 0 {
+		t.Errorf("diagnostics =\n%s\nwant none", strings.Join(diags, "\n"))
+	}
+	if want := "  Color = .Color cast:test.Color"; !slices.ContainsFunc(found, func(p string) bool {
+		return strings.Contains(p, want)
+	}) {
+		t.Errorf("plans =\n%s\nwant one containing %q", strings.Join(found, "\n"), want)
+	}
+}
+
 func TestUnexported(t *testing.T) {
 	t.Parallel()
 
