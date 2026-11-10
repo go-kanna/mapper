@@ -153,6 +153,10 @@ there:
 A package may have several such interfaces; they all go into its one `mapper_gen.go`. An interface embedding another is
 not supported.
 
+`//kanna:mapper` goes right above an interface type; `//kanna:map`, `//kanna:share`, and `//kanna:allow` right above
+one of its methods; and `//kanna:converter` right above a variable. Above any other declaration, such as a struct, a
+function, or a type alias, nothing reads the line, so it is an error.
+
 Code may call a declared function before the first run has written it, or as its declaration is about to change it.
 kanna-mapper type-checks the packages it loads once more with what it is about to write in place, and writes nothing
 while their code does not compile with it: a mistake the missing function hid is reported then, such as a field that

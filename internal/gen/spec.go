@@ -128,7 +128,29 @@ func decls(pkg *packages.Package) ([]decl, []diag.Diag) {
 			}
 		}
 	}
-	return found, append(diags, duplicates(found)...)
+	return found, slices.Concat(diags, duplicates(found), misplaced(pkg))
+}
+
+// marks are the shapes of declaration each directive is read on.
+var marks = map[string]directive.Shape{
+	mapperKey:    directive.InterfaceType,
+	mapKey:       directive.InterfaceMethod,
+	shareKey:     directive.InterfaceMethod,
+	allowKey:     directive.InterfaceMethod,
+	converterKey: directive.Var,
+}
+
+// misplaced says, in the order they are written, which directives of pkg are
+// on a declaration of a shape they are never read on, as //kanna:mapper on a
+// struct.
+func misplaced(pkg *packages.Package) []diag.Diag {
+	var diags []diag.Diag
+	for _, l := range directive.Lines(pkg.Fset, slices.DeleteFunc(slices.Clone(pkg.Syntax), ast.IsGenerated)) {
+		if s, ok := marks[l.Key]; ok {
+			diags = append(diags, directive.Misplaced([]directive.Line{l}, pkg.Types, s, l.Key)...)
+		}
+	}
+	return diags
 }
 
 // interfaceDecls reads the declaration ts, documented by doc, when it is
@@ -141,21 +163,18 @@ func interfaceDecls(pkg *packages.Package, ts *ast.TypeSpec, doc *ast.CommentGro
 	args, ds := d.Parse(directive.Spec{Words: []string{strictOption}})
 	diags = append(diags, ds...)
 	strict := len(args) > 0
-	for _, key := range []string{mapKey, shareKey, allowKey} {
-		m, ds := directive.Find(pkg.Fset, doc, key)
-		if diags = append(diags, ds...); m.Found {
-			diags = append(diags, diag.Errorf(m.Pos,
-				"//kanna:%s goes above a method of the interface, not the interface", key))
-		}
-	}
 
 	pos := pkg.Fset.Position(ts.Name.Pos())
 	it, ok := ts.Type.(*ast.InterfaceType)
+	t := pkg.TypesInfo.TypeOf(ts.Name)
 	switch {
-	case ts.Assign.IsValid():
-		return nil, append(diags, diag.Errorf(pos, "//kanna:%s marks an interface declaration, not an alias", mapperKey))
+	case ts.Assign.IsValid() || !ok && (ts.Name.Name == "_" || t == nil || !types.IsInterface(t)):
+		// misplaced says what is wrong, deciding the blank type by its syntax.
+		return nil, diags
 	case !ok:
-		return nil, append(diags, diag.Errorf(pos, "//kanna:%s marks an interface; %s is not one", mapperKey, ts.Name.Name))
+		return nil, append(diags, diag.Errorf(pos,
+			"//kanna:%s reads the methods written in the interface, and %s writes none; declare them in it",
+			mapperKey, ts.Name.Name))
 	case ts.TypeParams != nil:
 		return nil, append(diags, diag.Errorf(pos, "generic interface %s is not supported", ts.Name.Name))
 	case len(it.Methods.List) == 0:

@@ -1,6 +1,7 @@
 package gen_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -76,13 +77,14 @@ type _ interface {
 	}
 }
 
+// pair follows the declarations of every case of TestDecls_Diagnostics and
+// TestDecls_Misplaced.
+const pair = "\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n" +
+	"\ntype S string\n\nconst SOn S = \"on\"\n" +
+	"\ntype P int32\n\nconst P_ON P = 1\n\nfunc (x P) Enum() *P { return &x }\n"
+
 func TestDecls_Diagnostics(t *testing.T) {
 	t.Parallel()
-
-	// Every case uses these, after its own declarations.
-	const pair = "\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n" +
-		"\ntype S string\n\nconst SOn S = \"on\"\n" +
-		"\ntype P int32\n\nconst P_ON P = 1\n\nfunc (x P) Enum() *P { return &x }\n"
 
 	tests := []struct {
 		name string
@@ -90,14 +92,10 @@ func TestDecls_Diagnostics(t *testing.T) {
 		want string
 	}{
 		{
-			name: "not an interface",
-			src:  "//kanna:mapper\ntype Employee struct{ Name string }\n",
-			want: "test.go:4:6: error: //kanna:mapper marks an interface; Employee is not one",
-		},
-		{
-			name: "an alias",
-			src:  "//kanna:mapper\ntype A = interface{ F(E) W }\n",
-			want: "test.go:4:6: error: //kanna:mapper marks an interface declaration, not an alias",
+			name: "a type of an interface",
+			src:  "type Base interface{ F(E) W }\n\n//kanna:mapper\ntype M Base\n",
+			want: "test.go:6:6: error: //kanna:mapper reads the methods written in the interface, and M writes none; " +
+				"declare them in it",
 		},
 		{
 			name: "generic",
@@ -113,11 +111,6 @@ func TestDecls_Diagnostics(t *testing.T) {
 			name: "misspelled",
 			src:  "//kanna:mappr\ntype _ interface{ F(E) W }\n",
 			want: `did you mean "//kanna:mapper"?`,
-		},
-		{
-			name: "//kanna:map on the interface",
-			src:  "//kanna:mapper\n//kanna:map Name=-\ntype _ interface{ F(E) W }\n",
-			want: "test.go:4:1: error: //kanna:map goes above a method of the interface, not the interface",
 		},
 		{
 			name: "no methods",
@@ -233,16 +226,6 @@ func TestDecls_Diagnostics(t *testing.T) {
 			want: "test.go:6:2: error: F maps enums, which have no fields for //kanna:map or //kanna:share to name",
 		},
 		{
-			name: "//kanna:allow on the interface",
-			src:  "//kanna:mapper\n//kanna:allow unspecified\ntype _ interface{ F(P) (S, error) }\n",
-			want: "test.go:4:1: error: //kanna:allow goes above a method of the interface, not the interface",
-		},
-		{
-			name: "//kanna:share on the interface",
-			src:  "//kanna:mapper\n//kanna:share Tags\ntype _ interface{ F(P) (S, error) }\n",
-			want: "test.go:4:1: error: //kanna:share goes above a method of the interface, not the interface",
-		},
-		{
 			name: "//kanna:allow saying nothing",
 			src:  "//kanna:mapper\ntype _ interface {\n\t//kanna:allow\n\tF(P) (S, error)\n}\n",
 			want: "test.go:5:2: error: //kanna:allow needs unspecified",
@@ -290,6 +273,68 @@ func TestDecls_Diagnostics(t *testing.T) {
 			_, diags := gen.Decls(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + pair}))
 			if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.want) }) {
 				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
+			}
+		})
+	}
+}
+
+// A directive on a declaration of a shape it never marks is an error at the
+// directive, said once.
+func TestDecls_Misplaced(t *testing.T) {
+	t.Parallel()
+
+	const (
+		iface  = "an interface type"
+		method = "a method of an interface"
+		list   = "a variable"
+	)
+	tests := []struct {
+		name string
+		src  string
+		pos  string // where the error is
+		key  string
+		want string // the shape the directive marks
+		not  string // the shape of the declaration
+	}{
+		{"//kanna:mapper on a struct", "//kanna:mapper\ntype T struct{ F func(E) W }\n",
+			"3:1", "mapper", iface, "a struct type"},
+		{"//kanna:mapper on a type of a string", "//kanna:mapper\ntype T string\n",
+			"3:1", "mapper", iface, "a type other than a struct or an interface"},
+		{"//kanna:mapper on a blank type of an interface", "type Base interface{ F(E) W }\n\n//kanna:mapper\ntype _ Base\n",
+			"5:1", "mapper", iface, "a type other than a struct or an interface"},
+		{"//kanna:mapper on an alias", "//kanna:mapper\ntype T = interface{ F(E) W }\n",
+			"3:1", "mapper", iface, "a type alias"},
+		{"//kanna:mapper on a variable", "//kanna:mapper\nvar _ interface{ F(E) W }\n",
+			"3:1", "mapper", iface, "a variable"},
+		{"//kanna:mapper on a function", "//kanna:mapper\nfunc f(E) W { return W{} }\n",
+			"3:1", "mapper", iface, "a function"},
+		{"//kanna:mapper on a group", "//kanna:mapper\ntype (\n\tT interface{ F(E) W }\n\tU interface{ F(W) E }\n)\n",
+			"3:1", "mapper", iface, "a group of declarations"},
+		{"//kanna:map on the interface", "//kanna:map Name=-\ntype T interface{ F(E) W }\n",
+			"3:1", "map", method, iface},
+		{"//kanna:share on the interface", "//kanna:share Name\ntype T interface{ F(E) W }\n",
+			"3:1", "share", method, iface},
+		{"//kanna:allow on the interface", "//kanna:allow unspecified\ntype T interface{ F(P) (S, error) }\n",
+			"3:1", "allow", method, iface},
+		{"//kanna:map on a field", "type T struct {\n\t//kanna:map Name=-\n\tF func(E) W\n}\n",
+			"4:2", "map", method, "a struct field"},
+		{"//kanna:converter on a function", "//kanna:converter\nfunc f(E) W { return W{} }\n",
+			"3:1", "converter", list, "a function"},
+		{"//kanna:converter on a group", "//kanna:converter\nvar (\n\tl = []any{}\n\tm = []any{}\n)\n",
+			"3:1", "converter", list, "a group of declarations"},
+		{"//kanna:converter in a function", "func f() {\n\t//kanna:converter\n\tvar l = []any{}\n\t_ = l\n}\n",
+			"4:2", "converter", list, "a declaration inside a function"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, diags := gen.Decls(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + pair}))
+			want := []string{fmt.Sprintf("test.go:%s: error: //kanna:%s marks %s, not %s, so nothing reads it\n"+
+				"  write it right above %s", tt.pos, tt.key, tt.want, tt.not, tt.want)}
+			if !slices.Equal(diags, want) {
+				t.Errorf("diagnostics = %q, want %q", diags, want)
 			}
 		})
 	}
