@@ -258,7 +258,7 @@ func Ops(pkg *packages.Package, pairs ...[2]string) (ops, written []string) {
 	for i := range ds {
 		funcs.fs = append(funcs.fs, &function{name: ds[i].name, src: ds[i].src, dst: ds[i].dst, decl: &ds[i]})
 	}
-	c := converter{pkg: pkg.Types, convs: cs, funcs: funcs, missing: func(p *types.Package) {
+	c := converter{fset: pkg.Fset, pkg: pkg.Types, convs: cs, funcs: funcs, missing: func(p *types.Package) {
 		panic("only part of " + p.Path() + " is loaded")
 	}}
 

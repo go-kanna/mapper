@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"go/token"
 	"go/types"
 
 	"github.com/go-kanna/internal/enumtype"
@@ -113,6 +114,7 @@ func (opNew) fallible() bool     { return true }
 
 // converter works out ops from what a package lists and declares.
 type converter struct {
+	fset  *token.FileSet
 	pkg   *types.Package // the package generated into
 	convs convs
 	funcs functions
@@ -199,12 +201,9 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 	if enumPair(src, dst) {
 		return opCall{c.funcs.write(src, dst)}, true
 	}
-	// An enum of kanna-value is made with its constructor, so that a string
-	// from the wire is held to the constants.
-	if e, ok := enumtype.Of(dst); ok && callableFunc(e.Constructor, c.pkg) {
-		str := types.Typ[types.String]
-		if o, ok := c.try(src, str, write); ok {
-			return opNew{ctor: e.Constructor, held: str, elem: o}, true
+	if e, ok := enumtype.Of(dst); ok {
+		if o, ok, final := c.newEnum(src, e, write); final {
+			return o, ok
 		}
 	}
 
@@ -230,6 +229,22 @@ func (c converter) try(src, dst types.Type, write bool) (op, bool) {
 		return opCall{c.funcs.write(src, dst)}, true
 	}
 	return nil, false
+}
+
+// newEnum returns how a src becomes the enum e of kanna-value: with its
+// constructor, so that a string from the wire is held to the constants. final
+// reports that nothing else is to make one, as when kanna-value has yet to
+// generate the constructor, which a cast would stand in for by letting any
+// string through.
+func (c converter) newEnum(src types.Type, e enumtype.Type, write bool) (o op, ok, final bool) {
+	if !callableFunc(e.Constructor, c.pkg) {
+		return nil, false, ungeneratedEnum(c.fset, e)
+	}
+	str := types.Typ[types.String]
+	if o, ok := c.try(src, str, write); ok {
+		return opNew{ctor: e.Constructor, held: str, elem: o}, true, true
+	}
+	return nil, false, false
 }
 
 // same returns how a value of type t becomes one of t: as it is, or, for a slice

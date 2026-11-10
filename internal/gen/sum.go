@@ -37,40 +37,75 @@ type sumCase struct {
 // they are declared in fset. A oneof of protobuf is implemented by its wrappers through
 // pointers only, so it is none. Any other type has none either.
 func sumVariants(fset *token.FileSet, t types.Type) []*types.Named {
-	variants, _ := implementations(fset, t)
-	return variants
+	return implementations(fset, t).byValue
 }
 
-// implementations returns the exported named types of the package of t that
-// implement it, when it is an interface with an unexported method: by value,
-// and through a pointer only, each in the order they are declared in fset.
-func implementations(fset *token.FileSet, t types.Type) (byValue, byPointer []*types.Named) {
+// impls are the named types of a package that implement an interface of it,
+// each in the order they are declared.
+type impls struct {
+	// byValue are exported and not generic, and implement it by value.
+	byValue []*types.Named
+	// byPointer are exported and not generic, and implement it through a
+	// pointer only.
+	byPointer []*types.Named
+	// unexported and generic implement it either way, but a type switch of
+	// another package cannot name them.
+	unexported, generic []*types.Named
+}
+
+// implementations returns the named types of the package of t that implement
+// it, when it is an interface with an unexported method.
+func implementations(fset *token.FileSet, t types.Type) impls {
+	var is impls
 	named, ok := types.Unalias(t).(*types.Named)
 	if !ok || named.Obj().Pkg() == nil {
-		return nil, nil
+		return is
 	}
 	iface, ok := named.Underlying().(*types.Interface)
 	if !ok || !slices.ContainsFunc(slices.Collect(iface.Methods()), func(m *types.Func) bool { return !m.Exported() }) {
-		return nil, nil
+		return is
 	}
 	scope := named.Obj().Pkg().Scope()
 	for _, name := range scope.Names() {
 		tn, ok := scope.Lookup(name).(*types.TypeName)
-		if !ok || tn.IsAlias() || !tn.Exported() {
+		if !ok || tn.IsAlias() {
 			continue
 		}
 		v, ok := tn.Type().(*types.Named)
+		if !ok || types.IsInterface(v) {
+			continue
+		}
 		switch {
-		case !ok || v.TypeParams().Len() > 0 || types.IsInterface(v):
+		case v.TypeParams().Len() > 0:
+			if declares(v, iface) {
+				is.generic = append(is.generic, v)
+			}
+		case !types.Implements(types.NewPointer(v), iface):
+		case !tn.Exported():
+			is.unexported = append(is.unexported, v)
 		case types.Implements(v, iface):
-			byValue = append(byValue, v)
-		case types.Implements(types.NewPointer(v), iface):
-			byPointer = append(byPointer, v)
+			is.byValue = append(is.byValue, v)
+		default:
+			is.byPointer = append(is.byPointer, v)
 		}
 	}
-	slices.SortFunc(byValue, declOrder(fset))
-	slices.SortFunc(byPointer, declOrder(fset))
-	return byValue, byPointer
+	for _, list := range [][]*types.Named{is.byValue, is.byPointer, is.unexported, is.generic} {
+		slices.SortFunc(list, declOrder(fset))
+	}
+	return is
+}
+
+// declares reports whether the generic type v declares every method of iface,
+// on itself or its pointer: whether it implements iface is left unspecified by
+// go/types until it is instantiated.
+func declares(v *types.Named, iface *types.Interface) bool {
+	for m := range iface.Methods() {
+		obj, _, _ := types.LookupFieldOrMethod(v, true, m.Pkg(), m.Name())
+		if _, ok := obj.(*types.Func); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // armsFor returns the arms of arms that the variant v matches: those whose field
@@ -113,14 +148,27 @@ func (p *planner) planSum(f *function, at site, pair fieldPair) (sumPlan, bool) 
 	if !out {
 		sum = dstT
 	}
-	_, byPointer := implementations(p.fset, sum)
-	for _, v := range byPointer {
-		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: *%s implements %s, but %s does not, so it is no variant",
-			at.path, pair.dst.Name(), typeLabel(v), typeLabel(sum), typeLabel(v)).
-			WithHints(fmt.Sprintf("declare the methods of %s on %s, not on *%s", typeLabel(sum), typeLabel(v), typeLabel(v))))
+	is := implementations(p.fset, sum)
+	noVariant := func(v *types.Named, msg, hint string) {
+		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s: %s", at.path, pair.dst.Name(), msg).WithHints(hint))
 		for _, a := range armsFor(v, arms) {
 			matched[a.wrapper] = true
 		}
+	}
+	for _, v := range is.byPointer {
+		noVariant(v, fmt.Sprintf("*%s implements %s, but %s does not, so it is no variant",
+			typeLabel(v), typeLabel(sum), typeLabel(v)),
+			fmt.Sprintf("declare the methods of %s on %s, not on *%s", typeLabel(sum), typeLabel(v), typeLabel(v)))
+	}
+	for _, v := range is.unexported {
+		noVariant(v, fmt.Sprintf("%s implements %s, but is unexported, so it is no variant",
+			typeLabel(v), typeLabel(sum)),
+			fmt.Sprintf("export %s, or map the field with a function of your own", typeLabel(v)))
+	}
+	for _, v := range is.generic {
+		noVariant(v, fmt.Sprintf("%s implements %s, but is generic, so it is no variant",
+			typeLabel(v), typeLabel(sum)),
+			"map the field with a function of your own")
 	}
 	for _, v := range variants {
 		found := armsFor(v, arms)

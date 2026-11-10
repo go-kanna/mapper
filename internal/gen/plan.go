@@ -76,7 +76,7 @@ type planner struct {
 func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]token.Position,
 ) ([]*plan, []string, []diag.Diag) {
 	p := &planner{fset: pkg.Fset, taken: make(map[string]bool), sites: make(map[*function]site)}
-	p.conv = converter{pkg: pkg.Types, convs: cs, funcs: p, missing: func(pkg *types.Package) {
+	p.conv = converter{fset: pkg.Fset, pkg: pkg.Types, convs: cs, funcs: p, missing: func(pkg *types.Package) {
 		p.missing = append(p.missing, pkg.Path())
 	}}
 	for name := range declared {
