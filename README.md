@@ -458,8 +458,9 @@ func orderStatusToModel(src orderv1.OrderStatus) (model.OrderStatus, error) {
 
 A value protobuf has and the domain does not, or a number nobody declared, is an error coming back, so a function
 mapping an enum from protobuf has to return one. Protobuf's 0 is such a value, unless a constant matches it by name.
-Going out, what is none of the constants, the empty string included, becomes protobuf's 0. A constant the domain has
-and protobuf does not stops generation instead:
+Going out, what is none of the constants, the empty string included, becomes protobuf's 0, unless a constant matches 0,
+a value of its own such as `COLOR_RED = 0`: then it is an error, as it could not be told from that constant, and the
+function going out has to return one too. A constant the domain has and protobuf does not stops generation instead:
 
 ```console
 ./mapper.go:15:2: error: OrderToProto: Status: model.OrderStatusRefunded has no counterpart in orderv1.OrderStatus
