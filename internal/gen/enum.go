@@ -97,7 +97,7 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 	ambiguous := func(msg string) {
 		p.diags = append(p.diags, diag.Errorf(at.pos, "%s: %s", at.path, msg).
 			WithHints("rename one of them", fmt.Sprintf("or list a func(%s) %s in a //kanna:%s list",
-				typeLabel(f.src), resultLabel(f), converterKey)))
+				p.code(f.src), p.resultCode(f), converterKey)))
 	}
 	for _, c := range goConsts {
 		if !c.Exported() && c.Pkg() != p.conv.pkg {
@@ -124,7 +124,7 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 				d = d.WithHints(fmt.Sprintf("or name it %s, after its type, to match %s", name, protoValue(proto, value)))
 			}
 			p.diags = append(p.diags, d.WithHints(fmt.Sprintf("or list a func(%s) %s in a //kanna:%s list",
-				typeLabel(f.src), resultLabel(f), converterKey)))
+				p.code(f.src), p.resultCode(f), converterKey)))
 			continue
 		}
 		if out {
@@ -145,7 +145,7 @@ func (p *planner) planEnum(f *function, at site, param string) *plan {
 		if d := f.decl; d != nil && !d.fallible {
 			p.diags = append(p.diags, diag.Errorf(at.pos, "%s has to return an error: %s can hold what %s has no value for",
 				d.name, typeLabel(d.src), typeLabel(d.dst)).
-				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
+				WithHints(p.fallibleHint(d)))
 		}
 		f.fallible = true
 		allowed := f.decl != nil && f.decl.allowUnspecified
@@ -179,19 +179,19 @@ func (p *planner) requireErrorForTakenZero(f *function, ep *enumPlan, at site, p
 			p.diags = append(p.diags, diag.Errorf(at.pos,
 				"%s has to return an error: %s maps to %s, the 0 of %s, which a %s matching no constant would become too",
 				d.name, qualifiedName(c.src, labelQualifier), protoValue(proto, c.dst), typeLabel(d.dst), typeLabel(d.src)).
-				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
+				WithHints(p.fallibleHint(d)))
 		}
 		f.fallible = true
 		return
 	}
 }
 
-// resultLabel spells what f returns, with its error if it has one.
-func resultLabel(f *function) string {
+// resultCode spells what f returns, with its error if it has one.
+func (p *planner) resultCode(f *function) string {
 	if _, out := enumtype.Of(f.src); out {
-		return typeLabel(f.dst)
+		return p.code(f.dst)
 	}
-	return "(" + typeLabel(f.dst) + ", error)"
+	return "(" + p.code(f.dst) + ", error)"
 }
 
 func labelQualifier(p *types.Package) string { return p.Name() }

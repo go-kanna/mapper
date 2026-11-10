@@ -154,7 +154,9 @@ func TestMatches_Diagnostics(t *testing.T) {
 			// Reading it would panic when the pointer is nil.
 			name:  "a field promoted through a pointer",
 			types: "type Base struct{ Created string }\ntype S struct{ *Base }\ntype D struct{ Created string }",
-			want:  "test.go:9:2: error: F: no source in test.S for test.D.Created",
+			want: "test.go:9:2: error: F: no source in test.S for test.D.Created\n" +
+				"  test.S.Base is embedded as a pointer, so its Created is not read:" +
+				" reading it would panic when the pointer is nil",
 		},
 		{
 			name:  "an entry naming no destination field",
@@ -222,18 +224,18 @@ type Tagged struct{ City string ` + "`map:\"Town\"`" + ` }
 		{
 			dst: "AddressPB",
 			want: "error: Owner: Address: no source in test.Address for test.AddressPB.Etag\n" +
-				"  declare AddressToPB(test.Address) test.AddressPB in the //kanna:mapper interface and add //kanna:map Etag=-",
+				"  declare AddressToPB(Address) AddressPB in the //kanna:mapper interface and add //kanna:map Etag=-",
 		},
 		{
 			dst: "Tagged",
 			want: "test.go:9:21: error: map tag \"Town\" on test.Tagged.City names no field of test.Address\n" +
-				"  or declare AddressToTagged(test.Address) test.Tagged in the //kanna:mapper interface" +
+				"  or declare AddressToTagged(Address) Tagged in the //kanna:mapper interface" +
 				" and add //kanna:map City=<field>",
 		},
 		{
 			dst: "Folded",
 			want: "error: Owner: Address: test.Folded.CiTy could read test.Address.City or test.Address.CITY\n" +
-				"  declare AddressToFolded(test.Address) test.Folded in the //kanna:mapper interface" +
+				"  declare AddressToFolded(Address) Folded in the //kanna:mapper interface" +
 				" and add //kanna:map CiTy=<field>",
 		},
 	}
@@ -241,7 +243,7 @@ type Tagged struct{ City string ` + "`map:\"Town\"`" + ` }
 		t.Run(tt.dst, func(t *testing.T) {
 			t.Parallel()
 
-			suggest := "AddressTo" + strings.TrimPrefix(tt.dst, "Address") + "(test.Address) test." + tt.dst
+			suggest := "AddressTo" + strings.TrimPrefix(tt.dst, "Address") + "(Address) " + tt.dst
 			_, diags := gen.MatchWritten(pkg, "Address", tt.dst, "Owner: Address", suggest)
 			if !slices.Equal(diags, []string{tt.want}) {
 				t.Errorf("diagnostics = %q, want %q", diags, []string{tt.want})

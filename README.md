@@ -119,6 +119,9 @@ The declaration is ordinary Go: the compiler and your editor check every type an
 uses need no blank import to stay. The interface is never implemented, which is why it can be called `_`; any name
 works. (`uuid` is the standard library's, new in Go 1.27; `github.com/google/uuid` is listed the same way.)
 
+With two or more kanna generators, run them with [`go tool kanna gen`](https://github.com/go-kanna/kanna), which runs
+them in the order they need.
+
 A mapping that cannot be written stops generation, rather than the first request that meets it. Had the wire type
 carried a `Revision` the domain does not have, the domain's `Status` been an enum of its own, and `EmployeeToModel`
 been declared without its error:
@@ -239,8 +242,12 @@ Each destination field takes the first rule that matches.
 | the same name, as Go selects `src.Name`                 | `Name` → `Name`, or else an embedded struct's `Name`           |
 | the same name, any case                                 | `ID` → `Id`                                                    |
 
-A destination field with no source is an error, not a silent zero value. A field tagged `map:"-"` takes no part in
-mapping, in either direction. A tag on a promoted field keeps applying: a field excluded or renamed in an embedded
+A destination field with no source is an error, not a silent zero value. An unexported destination field is not
+filled, and stays zero. A field tagged `map:"-"` takes no part in mapping, in either direction.
+
+An embedded struct counts differently on each side. In the source, its fields are read as promoted, as Go selects
+`src.Name`. In the destination, it is one field, named after its type, which a source field of that name fills; its
+fields are not matched one by one. A tag on a promoted field keeps applying: a field excluded or renamed in an embedded
 struct is not matched by its name. Neither is a field promoted through an embedded pointer, which would panic to read
 when the pointer is nil, or through an embedded field tagged `map:"-"`.
 
@@ -343,7 +350,8 @@ The error of a conversion that fails names the destination field it was for: `ma
 
 A slice or a map of the same type on both sides is copied, with `slices.Clone` or `maps.Clone`, so that changing what
 the destination holds leaves the source as it was, and the other way round; nil stays nil. What it holds is not copied
-in turn, nor is a slice inside a struct of the same type: only the field mapped is.
+in turn, nor is a slice inside a struct of the same type: only the field mapped is. A pointer of the same type on both
+sides is not copied either: the destination points to what the source does.
 
 A field to hand over as it is, such as the bytes of a file, which the copy would double, is shared instead. Name it in
 a `//kanna:share` line of the function, a destination field, for a type you cannot tag, such as one protoc-gen-go
@@ -408,8 +416,13 @@ func TodoFromProto(src *todov1.Todo) (model.Todo, error) {
 
 A rule can reject the value, so a function making one has to return an error, and the rule's error is wrapped as any
 other is. A zero on the source side is checked like any other value rather than taken for the value type's zero value,
-which stands for one never given: map an optional field to a pointer, which stays nil. A value whose type stays the same
-is copied, not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
+which stands for one never given. Only a nil pointer, such as a field of proto3's `optional` left unset, maps to a nil
+pointer; a zero that is not behind a pointer still goes through the constructor. For a source you cannot change, list a
+function of your own for the pair, such as `func(string) (*model.Nickname, error)` returning nil for `""`. A value
+whose type stays the same is copied, not checked again, `*model.CompletedAt` from `model.CompletedAt` included.
+
+Going out, a value type's zero value is not checked: it is read with its accessor like any other, so a zero
+`model.Email` goes out as `""`, which coming back its constructor rejects. Give a value that may be missing a pointer.
 
 A value type is known by the shape kanna-value gives it, not by reading its `//kanna:value`, as kanna-mapper may see
 only the types of the package declaring it: a struct with one unexported field, a method named after the field's type
@@ -488,8 +501,9 @@ left out, or that a `required` rule is to report along with the other rules of a
 here, adds nothing to the package's API. On anything but a function from an enum of protobuf, it stops generation.
 
 A plain string, such as a field a message carries as `string`, becomes an enum of kanna-value through its constructor,
-`NewOrderStatus`, which rejects a string that is none of the constants, the empty one included: map an optional field
-to a pointer. The other way, the enum is a string already, and converts as it is.
+`NewOrderStatus`, which rejects a string that is none of the constants, the empty one included. As with a value type,
+only a nil pointer, such as a field of proto3's `optional` left unset, maps to a nil pointer; for a source you cannot
+change, list a function of your own for the pair. The other way, the enum is a string already, and converts as it is.
 
 An enum of protobuf is known by the shape protoc-gen-go gives it, an `int32` with an `Enum` method, and an enum of
 kanna-value by a string type with constants beside it, as kanna-mapper may see only the types of the package declaring

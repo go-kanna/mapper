@@ -287,8 +287,12 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 	// would only stand in for what it generates.
 	hints := p.ungeneratedHints(srcT, dstT)
 	if len(hints) == 0 {
-		hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", typeLabel(srcT), typeLabel(dstT), converterKey)
-		if c, ok := p.conv.convs.unlistedFor(srcT, dstT); ok {
+		hint := fmt.Sprintf("add a func(%s) %s to a //kanna:%s list", p.code(srcT), p.code(dstT), converterKey)
+		c, ok := p.conv.convs.unlistedFor(srcT, dstT)
+		if !ok {
+			c, ok = p.conv.convs.unlistedFor(hintType(srcT), hintType(dstT))
+		}
+		if ok {
 			hint = fmt.Sprintf("%s converts it; add it to a //kanna:%s list", c.label, converterKey)
 		}
 		hints = []string{hint}
@@ -350,8 +354,44 @@ func (p *planner) checkWritten(src, dst types.Type) {
 	p.diags = append(p.diags, diag.Errorf(p.at.pos,
 		"%s: %s: a strict mapping calls no function written for %s to %s, whose fields it would fill unnamed",
 		p.at.path, p.field, typeLabel(src), typeLabel(dst)).
-		WithHints(fmt.Sprintf("declare %s(%s) %s in the interface, and name its fields",
-			exported(helperName(src, dst)), typeLabel(src), typeLabel(dst))))
+		WithHints(fmt.Sprintf("declare %s in the interface, and name its fields", p.declaration(src, dst))))
+}
+
+// declaration spells the function a written one for src and dst would be
+// declared as.
+func (p *planner) declaration(src, dst types.Type) string {
+	return fmt.Sprintf("%s(%s) %s", exported(helperName(src, dst)), p.code(src), p.code(dst))
+}
+
+// fallibleHint says how d is declared to return an error.
+func (p *planner) fallibleHint(d *decl) string {
+	q := p.qualifier()
+	return fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, types.TypeString(d.src, q), types.TypeString(d.dst, q))
+}
+
+// code spells t as a hint suggests writing it in the package generated into:
+// by value, as a function for the value maps a pointer too, but for a message
+// of protobuf, which is passed around by pointer.
+func (p *planner) code(t types.Type) string {
+	return types.TypeString(hintType(t), p.qualifier())
+}
+
+func hintType(t types.Type) types.Type {
+	if protoMessage(t) {
+		return t
+	}
+	return derefType(t)
+}
+
+// qualifier names the packages other than the one generated into by their
+// names.
+func (p *planner) qualifier() types.Qualifier {
+	return func(pkg *types.Package) string {
+		if pkg == p.conv.pkg {
+			return ""
+		}
+		return pkg.Name()
+	}
 }
 
 // write makes the function for the pair of structs or of enums src and dst, to
@@ -364,7 +404,7 @@ func (p *planner) write(src, dst types.Type) *function {
 	p.sites[f] = site{
 		pos:     p.at.pos,
 		path:    p.at.path + ": " + p.field,
-		suggest: fmt.Sprintf("%s(%s) %s", exported(helperName(src, dst)), typeLabel(src), typeLabel(dst)),
+		suggest: p.declaration(src, dst),
 	}
 	return f
 }
@@ -442,7 +482,7 @@ func (p *planner) settleErrors() {
 			verb, by := causeOf(o)
 			p.diags = append(p.diags, diag.Errorf(d.pos, "%s has to return an error: %s is %s %s, which can fail",
 				d.name, name, verb, by).
-				WithHints(fmt.Sprintf("declare it as %s(%s) (%s, error)", d.name, typeLabel(d.src), typeLabel(d.dst))))
+				WithHints(p.fallibleHint(d)))
 		}
 	}
 }

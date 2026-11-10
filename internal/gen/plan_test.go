@@ -263,7 +263,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
 				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:12:2: error: F has to return an error: N is converted by strconv.Atoi, which can fail\n" +
-				"  declare it as F(test.S) (test.D, error)",
+				"  declare it as F(S) (D, error)",
 		},
 		{
 			name: "a fallible conversion of each element",
@@ -285,14 +285,32 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
 				"//kanna:converter\nvar _ = []any{strconv.Atoi}\n",
 			want: "test.go:14:2: error: F has to return an error: In is mapped by inToOut, which can fail\n" +
-				"  declare it as F(test.S) (test.D, error)",
+				"  declare it as F(S) (D, error)",
 		},
 		{
 			name: "nothing converts",
 			src: "type Status int32\ntype Code int32\ntype S struct{ Status Status }\ntype D struct{ Status Code }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:14:2: error: F: cannot map test.S.Status (test.Status) to test.D.Status (test.Code)\n" +
-				"  add a func(test.Status) test.Code to a //kanna:converter list",
+				"  add a func(Status) Code to a //kanna:converter list",
+		},
+		{
+			// A conversion of the values converts the pointers too; a message
+			// of protobuf is passed around by pointer.
+			name: "nothing converts behind pointers",
+			src: "type Code int32\ntype Msg struct{ V int32 }\nfunc (m *Msg) ProtoReflect() any { return m }\n" +
+				"type S struct{ A *Code; B *Code }\ntype D struct{ A *int32; B *Msg }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
+			want: "test.go:15:2: error: F: cannot map test.S.B (*test.Code) to test.D.B (*test.Msg)\n" +
+				"  add a func(Code) *Msg to a //kanna:converter list",
+		},
+		{
+			name: "a function of the package left out of the lists, converting the values",
+			src: "type Status int32\ntype Code int32\ntype S struct{ Status *Status }\ntype D struct{ Status *Code }\n\n" +
+				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n\n" +
+				"func statusToCode(s Status) Code { return Code(s) }\n",
+			want: "test.go:14:2: error: F: cannot map test.S.Status (*test.Status) to test.D.Status (*test.Code)\n" +
+				"  statusToCode converts it; add it to a //kanna:converter list",
 		},
 		{
 			name: "a function of the package left out of the lists",
@@ -315,7 +333,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"type D struct{ Home *AddressPB }\ntype AddressPB struct{ City, Etag string }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:14:2: error: F: Home: no source in test.Address for test.AddressPB.Etag\n" +
-				"  declare AddressToAddressPB(test.Address) *test.AddressPB in the //kanna:mapper interface" +
+				"  declare AddressToAddressPB(Address) AddressPB in the //kanna:mapper interface" +
 				" and add //kanna:map Etag=-",
 		},
 		{
@@ -326,7 +344,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"type S struct{ Status Status }\ntype D struct{ Status State }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(S) D\n}\n",
 			want: "test.go:25:2: error: F: Status: test.StatusRefunded has no counterpart in test.State\n" +
-				"  add STATE_REFUNDED to it\n  or list a func(test.Status) test.State in a //kanna:converter list",
+				"  add STATE_REFUNDED to it\n  or list a func(Status) State in a //kanna:converter list",
 		},
 		{
 			name: "an enum coming back from protobuf",
@@ -335,7 +353,7 @@ func TestPlans_Diagnostics(t *testing.T) {
 				"type S struct{ Status Status }\ntype D struct{ Status State }\n\n" +
 				"//kanna:mapper\ntype _ interface {\n\tF(D) S\n}\n",
 			want: "test.go:22:2: error: F has to return an error: Status is mapped by stateToStatus, which can fail\n" +
-				"  declare it as F(test.D) (test.S, error)",
+				"  declare it as F(D) (S, error)",
 		},
 		{
 			name: "a variant of a sum type with no arm in the oneof",
@@ -527,7 +545,7 @@ type _ interface {
 	EnvToPB(Env) EnvPB
 }
 `
-	const list = "\n  or list a func(test.Env) test.EnvPB in a //kanna:converter list"
+	const list = "\n  or list a func(Env) EnvPB in a //kanna:converter list"
 
 	tests := []struct {
 		name, src string
@@ -629,7 +647,7 @@ type _ interface {
 `}))
 
 	// LIVE is an alias of ENV_PB_LIVE, the same value.
-	const hints = "\n  rename one of them\n  or list a func(test.EnvPB) (test.Env, error) in a //kanna:converter list"
+	const hints = "\n  rename one of them\n  or list a func(EnvPB) (Env, error) in a //kanna:converter list"
 	want := []string{
 		"test.go:27:2: error: EnvFromPB: test.EnvSandbox matches both ENV_PB_SANDBOX and SANDBOX of test.EnvPB" + hints,
 		"test.go:27:2: error: EnvFromPB: test.EnvOnLeave and test.EnvOnleave both match ENV_PB_ON_LEAVE of test.EnvPB" +
@@ -736,7 +754,7 @@ type _ interface {
 `}))
 
 	want := "error: StatusFromPB has to return an error: test.WireStatus can hold what test.Status has no value for\n" +
-		"  declare it as StatusFromPB(test.WireStatus) (test.Status, error)"
+		"  declare it as StatusFromPB(WireStatus) (Status, error)"
 	if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, want) }) {
 		t.Errorf("diagnostics = %q, want one containing %q", diags, want)
 	}
@@ -823,13 +841,13 @@ func TestPlans_EnumGoingOutToATakenZeroReturnsAnError(t *testing.T) {
 			decl: "ColorToPB(Color) ColorPB",
 			want: "test.go:25:2: error: ColorToPB has to return an error: test.ColorRed maps to COLOR_PB_RED, " +
 				"the 0 of test.ColorPB, which a test.Color matching no constant would become too\n" +
-				"  declare it as ColorToPB(test.Color) (test.ColorPB, error)",
+				"  declare it as ColorToPB(Color) (ColorPB, error)",
 		},
 		{
 			name: "a struct's function",
 			decl: "PaintToPB(Paint) PaintPB",
 			want: "test.go:25:2: error: PaintToPB has to return an error: Color is mapped by colorToColorPB, which can fail\n" +
-				"  declare it as PaintToPB(test.Paint) (test.PaintPB, error)",
+				"  declare it as PaintToPB(Paint) (PaintPB, error)",
 		},
 	}
 	for _, tt := range tests {
@@ -866,7 +884,7 @@ func TestPlans_ValueTypes(t *testing.T) {
 	wantDiags := []string{
 		"checked.go:117:2: error: SessionFromRow: cannot map checked.SessionRow.Token (*string)" +
 			" to checked.Session.Token (*private.Token)\n" +
-			"  add a func(*string) *private.Token to a //kanna:converter list\n" +
+			"  add a func(string) private.Token to a //kanna:converter list\n" +
 			"  its constructor, private.newToken, cannot be called here: it is not exported",
 		// Odd has an accessor but no constructor of kanna-value's, so only the
 		// function that does convert is hinted at.
@@ -874,9 +892,9 @@ func TestPlans_ValueTypes(t *testing.T) {
 			"  NewOdd converts it; add it to a //kanna:converter list",
 		"checked.go:116:2: error: TodoFromRow has to return an error:" +
 			" CompletedAt is made by checked.NewCompletedAt, which can fail\n" +
-			"  declare it as TodoFromRow(checked.TodoRow) (checked.Todo, error)",
+			"  declare it as TodoFromRow(TodoRow) (Todo, error)",
 		"checked.go:120:2: error: PageToLink has to return an error: URL is converted by url.Parse, which can fail\n" +
-			"  declare it as PageToLink(checked.Page) (checked.Link, error)",
+			"  declare it as PageToLink(Page) (Link, error)",
 	}
 	if !slices.EqualFunc(diags, wantDiags, strings.HasSuffix) {
 		t.Errorf("diagnostics =\n%s\nwant ones ending in\n%s", strings.Join(diags, "\n"), strings.Join(wantDiags, "\n"))
@@ -1121,7 +1139,7 @@ func TestPlans_Strict(t *testing.T) {
 			methods: "\t//kanna:map ID Home\n\tToHomed(User) Homed\n",
 			want: "test.go:31:2: error: ToHomed: Home: a strict mapping calls no function written for test.Address " +
 				"to test.PublicAddress, whose fields it would fill unnamed\n" +
-				"  declare AddressToPublicAddress(test.Address) test.PublicAddress in the interface, and name its fields",
+				"  declare AddressToPublicAddress(Address) PublicAddress in the interface, and name its fields",
 		},
 	}
 
@@ -1176,7 +1194,7 @@ func TestPlans_StrictWrittenFunctions(t *testing.T) {
 		strict = "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n\tStrict(In) Out\n}\n"
 		refuse = "Strict: Child: a strict mapping calls no function written for test.ChildIn to test.ChildOut, " +
 			"whose fields it would fill unnamed\n" +
-			"  declare ChildInToChildOut(test.ChildIn) test.ChildOut in the interface, and name its fields"
+			"  declare ChildInToChildOut(ChildIn) ChildOut in the interface, and name its fields"
 	)
 
 	tests := []struct {
@@ -1201,6 +1219,25 @@ func TestPlans_StrictWrittenFunctions(t *testing.T) {
 			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
 				"\tStrict(InPointer) OutPointer\n}\n",
 			want: refuse,
+		},
+		{
+			name: "from a pointer",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
+				"\tStrict(InPointer) Out\n}\n",
+			want: "\n  declare ChildInToChildOut(ChildIn) ChildOut in the interface, and name its fields",
+		},
+		{
+			name: "to a pointer",
+			decls: loose + "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n" +
+				"\tStrict(In) OutPointer\n}\n",
+			want: "\n  declare ChildInToChildOut(ChildIn) ChildOut in the interface, and name its fields",
+		},
+		{
+			// What the hints suggest, one declaration for the values.
+			name: "declared for the values, mapping pointers",
+			decls: "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n\tFrom(InPointer) Out\n" +
+				"\t//kanna:map Child\n\tTo(In) OutPointer\n" +
+				"\t//kanna:map Name Secret\n\tChildInToChildOut(ChildIn) ChildOut\n}\n",
 		},
 		{
 			name: "declared by the strict interface",
