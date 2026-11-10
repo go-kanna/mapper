@@ -344,6 +344,28 @@ func (m *matching) promoted(name string) bool {
 	return ok
 }
 
+// embeddedPointer returns the embedded pointer that src would promote the field
+// named name through, which promotedField passes over.
+func (m *matching) embeddedPointer(name string) (string, bool) {
+	named, st, _ := namedStruct(m.src)
+	obj, index, _ := types.LookupFieldOrMethod(m.src, true, named.Obj().Pkg(), name)
+	if _, ok := obj.(*types.Var); !ok || len(index) < 2 {
+		return "", false
+	}
+	for _, i := range index[:len(index)-1] {
+		f := st.Field(i)
+		if _, ok := types.Unalias(f.Type()).(*types.Pointer); ok {
+			return f.Name(), true
+		}
+		next, ok := f.Type().Underlying().(*types.Struct)
+		if !ok {
+			return "", false
+		}
+		st = next
+	}
+	return "", false
+}
+
 // embeddedStruct walks the embedded structs path leads through from t to the
 // one declaring the field at the end of it, reporting false when one of them
 // is embedded as a pointer or tagged map:"-".
@@ -371,6 +393,10 @@ func (m *matching) unmapped(name, label string, embedded bool, sources []sourceF
 	}
 	if _, st, _ := namedStruct(m.src); hasField(st, name) && taggedOut(st, name) {
 		d = d.WithHints(fmt.Sprintf("%s.%s is tagged map:\"-\"; drop the tag to read it", structLabel(m.src), name))
+	}
+	if ptr, ok := m.embeddedPointer(name); ok {
+		d = d.WithHints(fmt.Sprintf("%s.%s is embedded as a pointer, so its %s is not read: "+
+			"reading it would panic when the pointer is nil", structLabel(m.src), ptr, name))
 	}
 	var tags []string
 	for _, sf := range sources {
