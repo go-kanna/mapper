@@ -1331,3 +1331,51 @@ func TestPlans_SuggestedDeclarationReturnsError(t *testing.T) {
 		})
 	}
 }
+
+// A message of protobuf's Hybrid API, which keeps its exported fields, is
+// mapped by them; a message of the Opaque API in a field stops the function.
+func TestPlans_ProtobufAPILevels(t *testing.T) {
+	t.Parallel()
+
+	found, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": `package test
+
+type Hybrid struct {
+	state struct{} ` + "`protogen:\"hybrid.v1\"`" + `
+	Name  *string
+}
+
+func (x *Hybrid) ProtoReflect() any { return x }
+
+type Opaque struct {
+	state                  struct{} ` + "`protogen:\"opaque.v1\"`" + `
+	XXX_raceDetectHookData struct{}
+}
+
+func (x *Opaque) ProtoReflect() any { return x }
+
+type Inner struct{ ID string }
+
+type Outer struct{ Inner Inner }
+
+type OuterPB struct{ Inner *Opaque }
+
+type Doc struct{ Name *string }
+
+//kanna:mapper
+type _ interface {
+	ToHybrid(Doc) *Hybrid
+	ToOuter(Outer) *OuterPB
+}
+`}))
+
+	if want := "ToHybrid(src test.Doc) *test.Hybrid\n  Name = .Name direct"; !slices.Contains(found, want) {
+		t.Errorf("plans = %q, want one of %q", found, want)
+	}
+	want := "test.go:28:2: error: ToOuter: " +
+		"cannot map test.Outer.Inner (test.Inner) to test.OuterPB.Inner (*test.Opaque)\n" +
+		"  add a func(Inner) *Opaque to a //kanna:converter list\n" +
+		"  *test.Opaque is a message of protobuf's Opaque API, which is not supported"
+	if !slices.Equal(diags, []string{want}) {
+		t.Errorf("diagnostics = %q, want %q", diags, []string{want})
+	}
+}

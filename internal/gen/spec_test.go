@@ -83,6 +83,20 @@ const pair = "\ntype E struct{ Name string }\n\ntype W struct{ Name string }\n" 
 	"\ntype S string\n\nconst SOn S = \"on\"\n" +
 	"\ntype P int32\n\nconst P_ON P = 1\n\nfunc (x P) Enum() *P { return &x }\n"
 
+// opaque is a message as protoc-gen-go writes it with the Opaque API.
+const opaque = `
+type Opaque struct {
+	state                  struct{} ` + "`protogen:\"opaque.v1\"`" + `
+	xxx_hidden_Name        *string
+	XXX_raceDetectHookData struct{}
+	XXX_presence           [1]uint32
+}
+
+func (x *Opaque) ProtoReflect() any { return x }
+
+func (x *Opaque) GetName() string { return *x.xxx_hidden_Name }
+`
+
 func TestDecls_Diagnostics(t *testing.T) {
 	t.Parallel()
 
@@ -179,11 +193,17 @@ func TestDecls_Diagnostics(t *testing.T) {
 			want: "test.go:5:2: error: F: the destination, test.Hidden, has no exported fields to map",
 		},
 		{
-			name: "protobuf's Opaque API",
-			src: "//kanna:mapper\ntype _ interface {\n\tF(E) *Opaque\n}\n\ntype Opaque struct{ name string }\n\n" +
-				"func (o *Opaque) GetName() string { return o.name }\n",
-			want: "test.go:5:2: error: F: the destination, *test.Opaque, has no exported fields to map\n" +
-				"  types generated with protobuf's Opaque API are not supported",
+			name: "a message of protobuf's Opaque API to map to",
+			src:  "//kanna:mapper\ntype _ interface {\n\tF(E) *Opaque\n}\n" + opaque,
+			want: "test.go:5:2: error: F: the destination, *test.Opaque, " +
+				"is a message of protobuf's Opaque API, which is not supported\n" +
+				"  write the function yourself, outside the //kanna:mapper interface, with the message's getters and setters",
+		},
+		{
+			name: "a message of protobuf's Opaque API to map from",
+			src:  "//kanna:mapper\ntype _ interface {\n\tF(*Opaque) (E, error)\n}\n" + opaque,
+			want: "test.go:5:2: error: F: the source, *test.Opaque, " +
+				"is a message of protobuf's Opaque API, which is not supported",
 		},
 		{
 			name: "//kanna:map with nothing after =",

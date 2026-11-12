@@ -307,6 +307,11 @@ func (p *planner) cannotMap(at site, src string, srcT types.Type, dst string, ds
 				obj.Pkg().Name(), newFunc))
 		}
 	}
+	for _, t := range []types.Type{srcT, dstT} {
+		if opaqueMessage(t) {
+			d = d.WithHints(typeLabel(t) + " is a message of protobuf's Opaque API, which is not supported")
+		}
+	}
 	if isInterface(srcT) || isInterface(dstT) {
 		d = d.WithHints("an interface field is mapped only as a protobuf oneof, " +
 			"whose arms are single-field structs implementing it")

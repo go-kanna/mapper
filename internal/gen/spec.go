@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -311,8 +312,9 @@ func pairTypeProblem(t types.Type) (string, []string) {
 		return "is not a struct or a pointer to one", nil
 	case named.TypeArgs().Len() > 0:
 		return "is generic, which is not supported", nil
-	case !hasExportedField(st) && hasGetter(named):
-		return "has no exported fields to map", []string{"types generated with protobuf's Opaque API are not supported"}
+	case opaqueMessage(t):
+		return "is a message of protobuf's Opaque API, which is not supported",
+			[]string{"write the function yourself, outside the //kanna:mapper interface, with the message's getters and setters"}
 	case !hasExportedField(st):
 		return "has no exported fields to map", nil
 	}
@@ -342,15 +344,13 @@ func hasExportedField(st *types.Struct) bool {
 	return false
 }
 
-// hasGetter reports whether named has a method like the GetName that protobuf
-// writes for every field.
-func hasGetter(named *types.Named) bool {
-	for m := range named.Methods() {
-		if strings.HasPrefix(m.Name(), "Get") {
-			return true
-		}
-	}
-	return false
+// opaqueMessage reports whether t, or what it points to, is a message
+// protoc-gen-go wrote with the Opaque API, as the protobuf runtime tells: the
+// tag of the first field says opaque.
+func opaqueMessage(t types.Type) bool {
+	_, st, ok := namedStruct(t)
+	return ok && protoMessage(t) && st.NumFields() > 0 &&
+		strings.HasPrefix(reflect.StructTag(st.Tag(0)).Get("protogen"), "opaque.")
 }
 
 // shareEntries reads the //kanna:share line of doc: the destination fields to
