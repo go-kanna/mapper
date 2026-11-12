@@ -104,8 +104,9 @@ var errorType = types.Universe.Lookup("error").Type()
 // for input.
 func decls(pkg *packages.Package) ([]decl, []diag.Diag) {
 	var (
-		found []decl
-		diags []diag.Diag
+		found  []decl
+		diags  []diag.Diag
+		marked = make(map[token.Position]bool)
 	)
 	for _, file := range pkg.Syntax {
 		if ast.IsGenerated(file) {
@@ -125,10 +126,25 @@ func decls(pkg *packages.Package) ([]decl, []diag.Diag) {
 				fs, ds := interfaceDecls(pkg, ts, doc)
 				found = append(found, fs...)
 				diags = append(diags, ds...)
+				if it, ok := ts.Type.(*ast.InterfaceType); ok && (isMarked(pkg.Fset, doc) || isMarked(pkg.Fset, gd.Doc)) {
+					for _, f := range it.Methods.List {
+						if f.Doc != nil {
+							for _, c := range f.Doc.List {
+								marked[pkg.Fset.Position(c.Slash)] = true
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-	return found, slices.Concat(diags, duplicates(found), misplaced(pkg))
+	return found, slices.Concat(diags, duplicates(found), misplaced(pkg, marked))
+}
+
+// isMarked reports whether doc holds //kanna:mapper, however it is written.
+func isMarked(fset *token.FileSet, doc *ast.CommentGroup) bool {
+	d, _ := directive.Find(fset, doc, mapperKey)
+	return d.Found
 }
 
 // marks are the shapes of declaration each directive is read on.
@@ -142,12 +158,21 @@ var marks = map[string]directive.Shape{
 
 // misplaced says, in the order they are written, which directives of pkg are
 // on a declaration of a shape they are never read on, as //kanna:mapper on a
-// struct.
-func misplaced(pkg *packages.Package) []diag.Diag {
+// struct, and which directives of a method are on one of an interface not
+// marked //kanna:mapper. marked holds the lines in the doc comments of the
+// methods of the interfaces marked //kanna:mapper.
+func misplaced(pkg *packages.Package, marked map[token.Position]bool) []diag.Diag {
 	var diags []diag.Diag
 	for _, l := range directive.Lines(pkg.Fset, slices.DeleteFunc(slices.Clone(pkg.Syntax), ast.IsGenerated)) {
-		if s, ok := marks[l.Key]; ok {
-			diags = append(diags, directive.Misplaced([]directive.Line{l}, pkg.Types, s, l.Key)...)
+		s, ok := marks[l.Key]
+		if !ok {
+			continue
+		}
+		diags = append(diags, directive.Misplaced([]directive.Line{l}, pkg.Types, s, l.Key)...)
+		if s == directive.InterfaceMethod && l.Shape(pkg.Types) == s && !marked[l.Pos] {
+			diags = append(diags, diag.Errorf(l.Pos,
+				"//kanna:%s marks a method of an interface marked //kanna:%s, not of an unmarked one, so nothing reads it",
+				l.Key, mapperKey).WithHints("mark the interface //kanna:"+mapperKey))
 		}
 	}
 	return diags

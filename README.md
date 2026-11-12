@@ -155,7 +155,8 @@ not supported.
 
 `//kanna:mapper` goes right above an interface type; `//kanna:map`, `//kanna:share`, and `//kanna:allow` right above
 one of its methods; and `//kanna:converter` right above a variable. Above any other declaration, such as a struct, a
-function, or a type alias, nothing reads the line, so it is an error.
+function, or a type alias, nothing reads the line, so it is an error. So is `//kanna:map`, `//kanna:share`, or
+`//kanna:allow` above a method of an interface not marked `//kanna:mapper`, which is most often a forgotten mark.
 
 Code may call a declared function before the first run has written it, or as its declaration is about to change it.
 kanna-mapper type-checks the packages it loads once more with what it is about to write in place, and writes nothing
