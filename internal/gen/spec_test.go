@@ -299,7 +299,7 @@ func TestDecls_Misplaced(t *testing.T) {
 		{"//kanna:mapper on a struct", "//kanna:mapper\ntype T struct{ F func(E) W }\n",
 			"3:1", "mapper", iface, "a struct type"},
 		{"//kanna:mapper on a type of a string", "//kanna:mapper\ntype T string\n",
-			"3:1", "mapper", iface, "a type other than a struct or an interface"},
+			"3:1", "mapper", iface, "a string type"},
 		{"//kanna:mapper on a blank type of an interface", "type Base interface{ F(E) W }\n\n//kanna:mapper\ntype _ Base\n",
 			"5:1", "mapper", iface, "a type other than a struct or an interface"},
 		{"//kanna:mapper on an alias", "//kanna:mapper\ntype T = interface{ F(E) W }\n",
