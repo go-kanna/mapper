@@ -1277,3 +1277,57 @@ func TestPlans_StrictWrittenFunctions(t *testing.T) {
 		})
 	}
 }
+
+// A hint suggesting to declare a written function declares it to return an
+// error when it can fail, as the generator would require of the declaration.
+func TestPlans_SuggestedDeclarationReturnsError(t *testing.T) {
+	t.Parallel()
+
+	const types = "type ChildIn struct{ N string }\n" +
+		"type ChildOut struct{ N int }\n" +
+		"type ChildEtag struct {\n\tN    int\n\tEtag string\n}\n" +
+		"type WrapIn struct{ Child ChildIn }\n" +
+		"type WrapOut struct{ Child ChildOut }\n" +
+		"type In struct{ Child ChildIn }\n" +
+		"type Out struct{ Child ChildOut }\n" +
+		"type InWrap struct{ Wrap WrapIn }\n" +
+		"type OutWrap struct{ Wrap WrapOut }\n" +
+		"type OutEtag struct{ Child ChildEtag }\n\n" +
+		"//kanna:converter\nvar _ = []any{strconv.Atoi}\n\n"
+	const (
+		loose  = "//kanna:mapper\ntype _ interface{ Loose(In) (Out, error) }\n"
+		strict = "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Child\n\tStrict(In) (Out, error)\n}\n"
+		refuse = "  declare ChildInToChildOut(ChildIn) (ChildOut, error) in the interface, and name its fields"
+	)
+
+	tests := []struct {
+		name, decls, want string
+	}{
+		{name: "written for it", decls: strict, want: refuse},
+		{name: "written for a mapping before it", decls: loose + strict, want: refuse},
+		{
+			name: "calling a function that can fail",
+			decls: "//kanna:mapper strict\ntype _ interface {\n\t//kanna:map Wrap\n" +
+				"\tStrict(InWrap) (OutWrap, error)\n}\n",
+			want: "  declare WrapInToWrapOut(WrapIn) (WrapOut, error) in the interface, and name its fields",
+		},
+		{
+			name:  "a field with no source",
+			decls: "//kanna:mapper\ntype _ interface{ Loose(In) (OutEtag, error) }\n",
+			want: "  declare ChildInToChildEtag(ChildIn) (ChildEtag, error) in the //kanna:mapper interface" +
+				" and add //kanna:map Etag=-",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "package test\n\nimport \"strconv\"\n\n" + types + tt.decls
+			_, diags := gen.Plans(pkgtest.Load(t, map[string]string{"test.go": src}))
+			if !slices.ContainsFunc(diags, func(d string) bool { return strings.Contains(d, tt.want) }) {
+				t.Errorf("diagnostics = %q, want one containing %q", diags, tt.want)
+			}
+		})
+	}
+}
