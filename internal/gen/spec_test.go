@@ -340,6 +340,50 @@ func TestDecls_Misplaced(t *testing.T) {
 	}
 }
 
+// A directive of a method on one of an interface not marked //kanna:mapper is
+// an error at the directive, said once.
+func TestDecls_Unmarked(t *testing.T) {
+	t.Parallel()
+
+	const unmarked = "marks a method of an interface marked //kanna:mapper, not of an unmarked one, " +
+		"so nothing reads it\n  mark the interface //kanna:mapper"
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"//kanna:map", "type T interface {\n\t//kanna:map Name=-\n\tF(E) W\n}\n",
+			[]string{"test.go:4:2: error: //kanna:map " + unmarked}},
+		{"//kanna:share", "type T interface {\n\t//kanna:share Name\n\tF(E) W\n}\n",
+			[]string{"test.go:4:2: error: //kanna:share " + unmarked}},
+		{"//kanna:allow", "type T interface {\n\t//kanna:allow unspecified\n\tF(P) (S, error)\n}\n",
+			[]string{"test.go:4:2: error: //kanna:allow " + unmarked}},
+		{"in an interface without a name", "var _ interface {\n\t//kanna:map Name=-\n\tF(E) W\n}\n",
+			[]string{"test.go:4:2: error: //kanna:map " + unmarked}},
+		// The interface is marked where nothing reads the mark, which is the one
+		// error.
+		{"in a group marked //kanna:mapper",
+			"//kanna:mapper\ntype (\n\tT interface {\n\t\t//kanna:map Name=-\n\t\tF(E) W\n\t}\n\tU interface{ F(W) E }\n)\n",
+			[]string{"test.go:3:1: error: //kanna:mapper marks an interface type, not a group of declarations, " +
+				"so nothing reads it\n  write it right above an interface type"}},
+		{"in an alias marked //kanna:mapper",
+			"//kanna:mapper\ntype T = interface {\n\t//kanna:map Name=-\n\tF(E) W\n}\n",
+			[]string{"test.go:3:1: error: //kanna:mapper marks an interface type, not a type alias, " +
+				"so nothing reads it\n  write it right above an interface type"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, diags := gen.Decls(pkgtest.Load(t, map[string]string{"test.go": "package test\n\n" + tt.src + pair}))
+			if !slices.Equal(diags, tt.want) {
+				t.Errorf("diagnostics = %q, want %q", diags, tt.want)
+			}
+		})
+	}
+}
+
 // A line that only looks like a //kanna:map is warned about and otherwise
 // ignored: the function is still declared, without the entries the line was
 // probably meant to give it.
