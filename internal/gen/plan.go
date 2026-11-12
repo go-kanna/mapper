@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/go-kanna/internal/diag"
@@ -104,6 +105,7 @@ func planFuncs(pkg *packages.Package, ds []decl, cs convs, declared map[string]t
 	}
 
 	p.settleErrors()
+	p.reviseSuggestions()
 	slices.Sort(p.missing)
 	return p.plans, slices.Compact(p.missing), dedupe(p.diags)
 }
@@ -339,28 +341,55 @@ func (p *planner) find(src, dst types.Type) (*function, bool) {
 	}
 	f := p.funcs[i]
 	if f.decl == nil {
-		p.checkWritten(src, dst)
+		p.checkWritten(f)
 	}
 	return f, true
 }
 
-// checkWritten reports a strict function calling a function written for src and
-// dst, whichever mapping wrote it first, as that function fills its fields
-// unnamed. An enum's has no fields.
-func (p *planner) checkWritten(src, dst types.Type) {
-	if !p.strict || enumPair(src, dst) {
+// checkWritten reports a strict function calling f, a function written for its
+// pair by whichever mapping came first, as f fills its fields unnamed. An
+// enum's has no fields.
+func (p *planner) checkWritten(f *function) {
+	if !p.strict || enumPair(f.src, f.dst) {
 		return
 	}
 	p.diags = append(p.diags, diag.Errorf(p.at.pos,
 		"%s: %s: a strict mapping calls no function written for %s to %s, whose fields it would fill unnamed",
-		p.at.path, p.field, typeLabel(src), typeLabel(dst)).
-		WithHints(fmt.Sprintf("declare %s in the interface, and name its fields", p.declaration(src, dst))))
+		p.at.path, p.field, typeLabel(f.src), typeLabel(f.dst)).
+		WithHints(fmt.Sprintf("declare %s in the interface, and name its fields", p.sites[f].suggest)))
 }
 
 // declaration spells the function a written one for src and dst would be
-// declared as.
-func (p *planner) declaration(src, dst types.Type) string {
-	return fmt.Sprintf("%s(%s) %s", exported(helperName(src, dst)), p.code(src), p.code(dst))
+// declared as, returning an error too if fallible.
+func (p *planner) declaration(src, dst types.Type, fallible bool) string {
+	result := p.code(dst)
+	if fallible {
+		result = "(" + result + ", error)"
+	}
+	return fmt.Sprintf("%s(%s) %s", exported(helperName(src, dst)), p.code(src), result)
+}
+
+// reviseSuggestions makes the hints suggesting the declaration of a written
+// function declare it to return an error if it turned out to, which is known
+// only once errors are settled.
+func (p *planner) reviseSuggestions() {
+	var pairs []string
+	for f, s := range p.sites {
+		if f.fallible {
+			pairs = append(pairs, "declare "+s.suggest+" ", "declare "+p.declaration(f.src, f.dst, true)+" ")
+		}
+	}
+	if pairs == nil {
+		return
+	}
+	r := strings.NewReplacer(pairs...)
+	for i, d := range p.diags {
+		hints := make([]string, len(d.Hints))
+		for j, h := range d.Hints {
+			hints[j] = r.Replace(h)
+		}
+		p.diags[i].Hints = hints
+	}
 }
 
 // fallibleHint says how d is declared to return an error.
@@ -397,15 +426,15 @@ func (p *planner) qualifier() types.Qualifier {
 // write makes the function for the pair of structs or of enums src and dst, to
 // be planned after the one being planned now.
 func (p *planner) write(src, dst types.Type) *function {
-	p.checkWritten(src, dst)
 	f := &function{name: p.name(helperName(src, dst)), src: src, dst: dst}
 	p.funcs = append(p.funcs, f)
 	p.queue = append(p.queue, f)
 	p.sites[f] = site{
 		pos:     p.at.pos,
 		path:    p.at.path + ": " + p.field,
-		suggest: p.declaration(src, dst),
+		suggest: p.declaration(src, dst, false),
 	}
+	p.checkWritten(f)
 	return f
 }
 
