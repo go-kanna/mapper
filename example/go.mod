@@ -9,7 +9,7 @@ tool github.com/go-kanna/mapper/cmd/kanna-mapper
 require google.golang.org/protobuf v1.36.12
 
 require (
-	github.com/go-kanna/internal v0.0.32-0.20261110094330-760e419d549c // indirect
+	github.com/go-kanna/internal v0.0.33 // indirect
 	github.com/go-kanna/mapper v0.0.25 // indirect
 	github.com/go-kanna/value v0.0.18 // indirect
 	golang.org/x/mod v0.42.0 // indirect
