@@ -398,9 +398,28 @@ func (e *emitter) assign(target string, o op, val string, dstT types.Type, field
 		v, k, x := e.s.Name("v"), e.s.Name("k"), e.s.Name("e")
 		fmt.Fprintf(&e.b, "if %s := %s; %s != nil {\n%s = make(%s, len(%s))\nfor %s, %s := range %s {\n",
 			v, val, v, target, e.typ(o.dst), v, k, x, v)
-		e.assign(target+"["+k+"]", o.elem, x, elemT, field)
-		e.b.WriteString("}\n}\n")
+		if !skips(o.elem) {
+			e.assign(target+"["+k+"]", o.elem, x, elemT, field)
+			e.b.WriteString("}\n}\n")
+			return
+		}
+		t := e.s.Name("t")
+		fmt.Fprintf(&e.b, "var %s %s\n", t, e.typ(elemT))
+		e.assign(t, o.elem, x, elemT, field)
+		fmt.Fprintf(&e.b, "%s[%s] = %s\n}\n}\n", target, k, t)
 	}
+}
+
+// skips reports whether assigning the conversion o may write nothing to its
+// target, for a nil source.
+func skips(o op) bool {
+	switch o := o.(type) {
+	case opDeref, opGuard, opSlice, opMap:
+		return true
+	case opGet:
+		return skips(o.elem)
+	}
+	return false
 }
 
 // keepsZero reports whether o makes the zero value of what it converts the
