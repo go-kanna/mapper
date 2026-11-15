@@ -30,39 +30,61 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 			v3[k] = addressToWire(e2)
 		}
 	}
-	var v5 *wire.Employee
-	if v6 := src.Manager; v6 != nil {
-		v5 = EmployeeToWire(*v6)
-	}
-	var v7 *string
-	if v8 := src.Backup; v8 != nil {
-		v9 := (*v8).String()
-		v7 = &v9
-	}
-	var v10 *wire.Timestamp
-	if v11 := src.LeftAt; v11 != nil {
-		v10 = wire.NewTimestamp(*v11)
-	}
-	var v12 []string
-	if v13 := src.Peers; v13 != nil {
-		v12 = make([]string, len(v13))
-		for i2, e3 := range v13 {
-			v12[i2] = e3.String()
+	var v5 map[string]*int32
+	if v6 := src.Ratings; v6 != nil {
+		v5 = make(map[string]*int32, len(v6))
+		for k2, e3 := range v6 {
+			v7 := e3
+			v5[k2] = &v7
 		}
 	}
-	var v14 *wire.Timestamp
-	if v15 := src.ReviewedAt; v15 != nil {
-		v14 = wire.NewTimestamp((*v15).Time())
+	var v8 map[string][]*wire.Address
+	if v9 := src.Rosters; v9 != nil {
+		v8 = make(map[string][]*wire.Address, len(v9))
+		for k3, e4 := range v9 {
+			var t []*wire.Address
+			if v10 := e4; v10 != nil {
+				t = make([]*wire.Address, len(v10))
+				for i2, e5 := range v10 {
+					t[i2] = addressToWire(e5)
+				}
+			}
+			v8[k3] = t
+		}
 	}
-	var v16 *wire.Status
-	if v17 := src.Former; v17 != nil {
-		v18 := statusToWire(*v17)
-		v16 = &v18
+	var v11 *wire.Employee
+	if v12 := src.Manager; v12 != nil {
+		v11 = EmployeeToWire(*v12)
 	}
-	var v19 *string
-	if v20 := src.Shift; v20 != nil {
-		v21 := string(*v20)
-		v19 = &v21
+	var v13 *string
+	if v14 := src.Backup; v14 != nil {
+		v15 := (*v14).String()
+		v13 = &v15
+	}
+	var v16 *wire.Timestamp
+	if v17 := src.LeftAt; v17 != nil {
+		v16 = wire.NewTimestamp(*v17)
+	}
+	var v18 []string
+	if v19 := src.Peers; v19 != nil {
+		v18 = make([]string, len(v19))
+		for i3, e6 := range v19 {
+			v18[i3] = e6.String()
+		}
+	}
+	var v20 *wire.Timestamp
+	if v21 := src.ReviewedAt; v21 != nil {
+		v20 = wire.NewTimestamp((*v21).Time())
+	}
+	var v22 *wire.Status
+	if v23 := src.Former; v23 != nil {
+		v24 := statusToWire(*v23)
+		v22 = &v24
+	}
+	var v25 *string
+	if v26 := src.Shift; v26 != nil {
+		v27 := string(*v26)
+		v25 = &v27
 	}
 	dst := &wire.Employee{
 		Id:         src.ID.String(),
@@ -72,32 +94,34 @@ func EmployeeToWire(src model.Employee) *wire.Employee {
 		Home:       addressToWire(src.Home),
 		Offices:    v,
 		ByRegion:   v3,
-		Manager:    v5,
+		Ratings:    v5,
+		Rosters:    v8,
+		Manager:    v11,
 		Note:       src.Note,
 		Contact:    contactToWire(src.Contact),
-		Backup:     v7,
-		LeftAt:     v10,
-		Peers:      v12,
+		Backup:     v13,
+		LeftAt:     v16,
+		Peers:      v18,
 		Grade:      src.Grade.Int32(),
-		ReviewedAt: v14,
+		ReviewedAt: v20,
 		Status:     statusToWire(src.Status),
-		Former:     v16,
-		Shift:      v19,
+		Former:     v22,
+		Shift:      v25,
 		Tags:       slices.Clone(src.Tags),
 		Photo:      src.Photo,
 	}
-	switch v22 := src.Payment.(type) {
+	switch v28 := src.Payment.(type) {
 	case model.Bank:
-		dst.Payment = &wire.Employee_Bank{Bank: bankToWire(v22)}
+		dst.Payment = &wire.Employee_Bank{Bank: bankToWire(v28)}
 	case *model.Bank:
-		if v22 != nil {
-			dst.Payment = &wire.Employee_Bank{Bank: bankToWire(*v22)}
+		if v28 != nil {
+			dst.Payment = &wire.Employee_Bank{Bank: bankToWire(*v28)}
 		}
 	case model.Cash:
-		dst.Payment = &wire.Employee_Cash{Cash: cashToWire(v22)}
+		dst.Payment = &wire.Employee_Cash{Cash: cashToWire(v28)}
 	case *model.Cash:
-		if v22 != nil {
-			dst.Payment = &wire.Employee_Cash{Cash: cashToWire(*v22)}
+		if v28 != nil {
+			dst.Payment = &wire.Employee_Cash{Cash: cashToWire(*v28)}
 		}
 	}
 	return dst
@@ -126,69 +150,94 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 			v4[k] = addressToModel(e3)
 		}
 	}
-	var v6 *model.Employee
-	if v7 := e.Manager; v7 != nil {
-		v8, err := EmployeeFromWire(v7)
+	var v6 map[string]int32
+	if v7 := e.Ratings; v7 != nil {
+		v6 = make(map[string]int32, len(v7))
+		for k2, e4 := range v7 {
+			var t int32
+			if v8 := e4; v8 != nil {
+				t = *v8
+			}
+			v6[k2] = t
+		}
+	}
+	var v9 map[string][]model.Address
+	if v10 := e.Rosters; v10 != nil {
+		v9 = make(map[string][]model.Address, len(v10))
+		for k3, e5 := range v10 {
+			var t2 []model.Address
+			if v11 := e5; v11 != nil {
+				t2 = make([]model.Address, len(v11))
+				for i2, e6 := range v11 {
+					t2[i2] = addressToModel(e6)
+				}
+			}
+			v9[k3] = t2
+		}
+	}
+	var v12 *model.Employee
+	if v13 := e.Manager; v13 != nil {
+		v14, err := EmployeeFromWire(v13)
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.Manager: %w", err)
 		}
-		v6 = &v8
+		v12 = &v14
 	}
-	var v9 *netip.Addr
-	if v10 := e.Backup; v10 != nil {
-		v11, err := netip.ParseAddr(*v10)
+	var v15 *netip.Addr
+	if v16 := e.Backup; v16 != nil {
+		v17, err := netip.ParseAddr(*v16)
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.Backup: %w", err)
 		}
-		v9 = &v11
+		v15 = &v17
 	}
-	var v12 *time.Time
-	if v13 := e.LeftAt; v13 != nil {
-		v14 := v13.AsTime()
-		v12 = &v14
+	var v18 *time.Time
+	if v19 := e.LeftAt; v19 != nil {
+		v20 := v19.AsTime()
+		v18 = &v20
 	}
-	var v15 []netip.Addr
-	if v16 := e.Peers; v16 != nil {
-		v15 = make([]netip.Addr, len(v16))
-		for i2, e4 := range v16 {
-			v17, err := netip.ParseAddr(e4)
+	var v21 []netip.Addr
+	if v22 := e.Peers; v22 != nil {
+		v21 = make([]netip.Addr, len(v22))
+		for i3, e7 := range v22 {
+			v23, err := netip.ParseAddr(e7)
 			if err != nil {
 				return model.Employee{}, fmt.Errorf("map model.Employee.Peers: %w", err)
 			}
-			v15[i2] = v17
+			v21[i3] = v23
 		}
 	}
-	v18, err := model.NewGrade(e.Grade)
+	v24, err := model.NewGrade(e.Grade)
 	if err != nil {
 		return model.Employee{}, fmt.Errorf("map model.Employee.Grade: %w", err)
 	}
-	var v19 *model.ReviewedAt
-	if v20 := e.ReviewedAt; v20 != nil {
-		v21, err := model.NewReviewedAt(v20.AsTime())
+	var v25 *model.ReviewedAt
+	if v26 := e.ReviewedAt; v26 != nil {
+		v27, err := model.NewReviewedAt(v26.AsTime())
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.ReviewedAt: %w", err)
 		}
-		v19 = &v21
+		v25 = &v27
 	}
-	v22, err := statusToModel(e.Status)
+	v28, err := statusToModel(e.Status)
 	if err != nil {
 		return model.Employee{}, fmt.Errorf("map model.Employee.Status: %w", err)
 	}
-	var v23 *model.Status
-	if v24 := e.Former; v24 != nil {
-		v25, err := statusToModel(*v24)
+	var v29 *model.Status
+	if v30 := e.Former; v30 != nil {
+		v31, err := statusToModel(*v30)
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.Former: %w", err)
 		}
-		v23 = &v25
+		v29 = &v31
 	}
-	var v26 *model.Shift
-	if v27 := e.Shift; v27 != nil {
-		v28, err := model.NewShift(*v27)
+	var v32 *model.Shift
+	if v33 := e.Shift; v33 != nil {
+		v34, err := model.NewShift(*v33)
 		if err != nil {
 			return model.Employee{}, fmt.Errorf("map model.Employee.Shift: %w", err)
 		}
-		v26 = &v28
+		v32 = &v34
 	}
 	dst := model.Employee{
 		ID:         v,
@@ -198,25 +247,27 @@ func EmployeeFromWire(e *wire.Employee) (model.Employee, error) {
 		Home:       addressToModel(e.Home),
 		Offices:    v2,
 		ByRegion:   v4,
-		Manager:    v6,
+		Ratings:    v6,
+		Rosters:    v9,
+		Manager:    v12,
 		Note:       e.Note,
 		Contact:    contactToModel(e.Contact),
-		Backup:     v9,
-		LeftAt:     v12,
-		Peers:      v15,
-		Grade:      v18,
-		ReviewedAt: v19,
-		Status:     v22,
-		Former:     v23,
-		Shift:      v26,
+		Backup:     v15,
+		LeftAt:     v18,
+		Peers:      v21,
+		Grade:      v24,
+		ReviewedAt: v25,
+		Status:     v28,
+		Former:     v29,
+		Shift:      v32,
 		Tags:       slices.Clone(e.Tags),
 		Photo:      e.Photo,
 	}
-	switch v29 := e.GetPayment().(type) {
+	switch v35 := e.GetPayment().(type) {
 	case *wire.Employee_Bank:
-		dst.Payment = bankToModel(v29.Bank)
+		dst.Payment = bankToModel(v35.Bank)
 	case *wire.Employee_Cash:
-		dst.Payment = cashToModel(v29.Cash)
+		dst.Payment = cashToModel(v35.Cash)
 	}
 	return dst, nil
 }

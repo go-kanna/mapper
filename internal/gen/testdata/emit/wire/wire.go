@@ -98,6 +98,8 @@ type Employee struct {
 	Home     *Address
 	Offices  []*Address
 	ByRegion map[string]*Address
+	Ratings  map[string]*int32
+	Rosters  map[string][]*Address
 	Manager  *Employee
 	Note     *string
 	Contact  *Contact

@@ -223,6 +223,28 @@ func TestGenerated_NilFieldsLeaveTheZero(t *testing.T) {
 	}
 }
 
+// A map entry whose source is nil keeps its key, holding what a nil field
+// converts as: the zero value.
+func TestGenerated_NilMapValuesKeepTheirKeys(t *testing.T) {
+	t.Parallel()
+
+	src := &wire.Employee{
+		Id:      "192.0.2.1",
+		Ratings: map[string]*int32{"set": new(int32(4)), "unset": nil},
+		Rosters: map[string][]*wire.Address{"set": {{City: "Kobe"}}, "unset": nil},
+	}
+	got, err := mapper.EmployeeFromWire(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]int32{"set": 4, "unset": 0}; !reflect.DeepEqual(got.Ratings, want) {
+		t.Errorf("Ratings = %v, want %v", got.Ratings, want)
+	}
+	if want := map[string][]model.Address{"set": {{City: "Kobe"}}, "unset": nil}; !reflect.DeepEqual(got.Rosters, want) {
+		t.Errorf("Rosters = %v, want %v", got.Rosters, want)
+	}
+}
+
 // nil stays nil wherever the destination can hold it, and a nil message maps
 // as an empty one.
 func TestGenerated_Nil(t *testing.T) {
