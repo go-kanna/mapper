@@ -113,7 +113,7 @@ func addressToEmployeev1(src model.Address) *employeev1.Address {
 
 宣言は普通の Go のコードです。コンパイラとエディタがその中のすべての型と関数をチェックし、宣言で使うインポートは、ブランクインポートを書かなくても残ります。インターフェースが実装されることは決してないので、`_` という名前にできます。どんな名前でも構いません。`uuid` は Go 1.27 で追加された標準ライブラリのパッケージです。`github.com/google/uuid` も同じようにリストに挙げられます。
 
-kanna の生成器を 2 つ以上使うなら、[`go tool kanna gen`](https://github.com/go-kanna/kanna) を使ってください。生成器を必要な順に動かします。
+kanna のジェネレータを 2 つ以上使うなら、[`go tool kanna gen`](https://github.com/go-kanna/kanna) を使ってください。ジェネレータを必要な順に動かします。
 
 マッピングを生成できない場合は、そのマッピングを最初に使ったリクエストを止めるのではなく、生成を止めます。ワイヤ型にドメインにはない `Revision` があり、ドメインの `Status` が独自の enum で、`EmployeeToModel` がエラーなしで宣言されていた場合は、次のようになります:
 
