@@ -11,7 +11,7 @@ kanna-mapper writes the functions between your domain types and the wire types y
 signatures; it writes the bodies, field by field, calling the conversions you list for the types Go cannot convert on
 its own.
 
-Part of the [kanna](https://go-kanna.github.io/) family of code generators. Requires Go 1.26.
+Part of the [kanna](https://go-kanna.github.io/) family of code generators. Requires Go 1.27.
 
 ## Install
 
@@ -633,8 +633,8 @@ handled: converted with `uuid.Parse` and `(*timestamppb.Timestamp).AsTime` liste
 between packages, renamed with a tag, excluded with `map:"-"` and with `//kanna:map`, mapped through a function written
 for a nested pair, and folded into a oneof. CI regenerates it and fails if the output would change.
 
-To try it, use Go 1.27 or later: the example uses the standard library's `uuid` package, while kanna-mapper itself
-requires Go 1.26. No database or protobuf compiler is needed; the wire types are included in the example.
+To try it, use Go 1.27 or later: the example uses the standard library's `uuid` package. No database or protobuf
+compiler is needed; the wire types are included in the example.
 
 ```sh
 git clone https://github.com/go-kanna/mapper.git

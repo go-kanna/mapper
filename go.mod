@@ -1,12 +1,10 @@
 module github.com/go-kanna/mapper
 
-go 1.26.0
-
-toolchain go1.26.9
+go 1.27.0
 
 require (
-	github.com/go-kanna/internal v0.0.33
-	github.com/go-kanna/value v0.0.18
+	github.com/go-kanna/internal v0.1.0
+	github.com/go-kanna/value v0.1.0
 )
 
 require (
